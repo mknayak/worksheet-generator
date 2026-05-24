@@ -4,6 +4,10 @@ using WorksheetGenerator.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── Configuration ─────────────────────────────────────────────────────────────
+// Add appsettings.local.json for local secrets (file is gitignored)
+builder.Configuration.AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true);
+
 // ── MVC ──────────────────────────────────────────────────────────────────────
 builder.Services.AddControllersWithViews();
 builder.Services.AddHttpClient();
