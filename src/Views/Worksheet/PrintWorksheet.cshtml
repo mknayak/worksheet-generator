@@ -1,0 +1,241 @@
+@model WorksheetViewModel
+@{
+    Layout = null;
+    var ws = Model.Worksheet;
+    var student = Model.Student;
+
+    string TypeLabel(string t) => t switch {
+        "multiple_choice" => "Multiple Choice",
+        "true_false"      => "True / False",
+        "fill_blank"      => "Fill in the Blank",
+        "short_answer"    => "Short Answer",
+        "word_problem"    => "Word Problem",
+        _                 => t
+    };
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ws.Title — Worksheet</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #111; background: #fff; }
+
+        /* Download button bar — hidden when printing */
+        .download-bar {
+            position: sticky; top: 0; z-index: 100;
+            background: #4f46e5; color: #fff;
+            padding: 10px 24px; display: flex; gap: 10px; align-items: center;
+        }
+        .download-bar button {
+            background: #fff; color: #4f46e5; border: none;
+            padding: 6px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 13px;
+        }
+        .download-bar button:hover { background: #e0e7ff; }
+        .download-bar a.back {
+            color: #c7d2fe; text-decoration: none; font-size: 13px; margin-right: auto;
+        }
+
+        /* Worksheet content */
+        .page { max-width: 800px; margin: 24px auto; padding: 0 24px; }
+
+        .ws-header { border-bottom: 3px solid #1e1b4b; padding-bottom: 14px; margin-bottom: 18px; }
+        .ws-header .subject { font-size: 9pt; text-transform: uppercase; letter-spacing: .08em; color: #6b7280; }
+        .ws-header h1 { font-size: 20pt; font-weight: 700; color: #1e1b4b; margin: 4px 0; }
+        .ws-header .topic { font-size: 11pt; color: #4f46e5; }
+        .ws-header .meta { font-size: 9pt; color: #9ca3af; margin-top: 4px; }
+
+        .student-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+            border: 1px solid #d1d5db; border-radius: 6px; padding: 12px;
+            margin-bottom: 16px; background: #f9fafb;
+        }
+        .student-grid .field { display: flex; flex-direction: column; }
+        .student-grid .label { font-size: 8pt; color: #9ca3af; text-transform: uppercase; letter-spacing: .05em; }
+        .student-grid .value { font-weight: 600; border-bottom: 1px solid #d1d5db; min-height: 22px; padding-bottom: 2px; }
+
+        .instructions {
+            background: #eff6ff; border-left: 4px solid #3b82f6;
+            padding: 8px 14px; border-radius: 0 6px 6px 0;
+            font-size: 10pt; color: #1e40af; margin-bottom: 20px;
+        }
+
+        .score-box {
+            border: 2px solid #d1d5db; border-radius: 8px;
+            padding: 6px 16px; text-align: center;
+        }
+        .score-box .label { font-size: 8pt; color: #9ca3af; }
+        .score-box .value { font-size: 16pt; font-weight: 700; }
+
+        .question { margin-bottom: 22px; page-break-inside: avoid; break-inside: avoid; }
+        .question .q-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+        .question .q-num { font-weight: 700; font-size: 11pt; min-width: 24px; flex-shrink: 0; }
+        .question .q-pts { font-size: 8.5pt; color: #9ca3af; margin-left: auto; white-space: nowrap; flex-shrink: 0; }
+        .question .q-text { font-size: 11pt; flex: 1; margin-left: 0; }
+
+        .options {
+            margin: 8px 0 0 32px;
+            display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px;
+        }
+        .option { display: flex; align-items: center; gap: 8px; }
+        .option .bubble {
+            width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid #6b7280;
+            flex-shrink: 0;
+        }
+        .option .opt-text { font-size: 10.5pt; }
+
+        .write-line {
+            border-bottom: 1px solid #9ca3af; margin: 10px 0 0 32px; height: 26px;
+        }
+        .blank-line {
+            display: inline-block; border-bottom: 1.5px solid #374151; width: 140px; margin: 0 2px;
+        }
+
+        .section-divider { border: none; border-top: 1px solid #e5e7eb; margin: 28px 0; }
+
+        @@media print {
+            .download-bar { display: none !important; }
+            .page { margin: 0; padding: 12px; max-width: 100%; }
+            body { font-size: 10.5pt; }
+            .question { page-break-inside: avoid; break-inside: avoid; }
+            .options    { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Download Bar (hidden on print) -->
+<div class="download-bar">
+    <a href="/Worksheet/View/@ws.Id" class="back">← Back to view</a>
+    <button onclick="window.print()">⬇ Save as PDF / Print</button>
+    <span style="font-size:12px;opacity:.75;">Tip: choose "Save as PDF" as your printer for a clean PDF</span>
+</div>
+
+<div class="page" id="worksheetContent">
+
+    <!-- Header -->
+    <div class="ws-header">
+        <div style="display:flex; align-items:flex-start; gap:12px;">
+            <div style="flex:1; min-width:0;">
+                <div class="subject">@ws.Subject</div>
+                <h1>@ws.Title</h1>
+                <div class="topic">@ws.Topic</div>
+                <div class="meta">
+                    Date: @ws.GeneratedAt.ToString("MMMM d, yyyy") &nbsp;&bull;&nbsp;
+                    Questions: @ws.Questions.Count &nbsp;&bull;&nbsp;
+                    Estimated time: @ws.EstimatedMinutes minutes
+                </div>
+            </div>
+            <div class="score-box" style="flex-shrink:0;">
+                <div class="label">Score</div>
+                <div class="value">____&nbsp;/&nbsp;@ws.TotalPoints</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Student Info (always blank — students fill in themselves) -->
+    <div class="student-grid">
+        <div class="field">
+            <span class="label">Student Name</span>
+            <span class="value"></span>
+        </div>
+        <div class="field">
+            <span class="label">Class / Section</span>
+            <span class="value"></span>
+        </div>
+        <div class="field">
+            <span class="label">Grade / Year</span>
+            <span class="value"></span>
+        </div>
+        <div class="field">
+            <span class="label">Teacher</span>
+            <span class="value"></span>
+        </div>
+        <div class="field" style="grid-column: 1 / -1;">
+            <span class="label">School</span>
+            <span class="value"></span>
+        </div>
+    </div>
+
+    <!-- Instructions -->
+    <div class="instructions">
+        <strong>Instructions:</strong> @ws.Instructions
+    </div>
+
+    <!-- Questions -->
+    @for (int i = 0; i < ws.Questions.Count; i++)
+    {
+        var q = ws.Questions[i];
+
+        // Group dividers before each type change
+        if (i > 0 && ws.Questions[i - 1].Type != q.Type)
+        {
+            <hr class="section-divider" />
+        }
+
+        <div class="question">
+            <div class="q-head">
+                <span class="q-num">@(i + 1).</span>
+                @if (q.Type == "fill_blank")
+                {
+                    var parts = q.Text.Split("_____");
+                    <span class="q-text">
+                        @for (int p2 = 0; p2 < parts.Length; p2++)
+                        {
+                            @parts[p2]
+                            if (p2 < parts.Length - 1)
+                            {
+                                <span class="blank-line">&nbsp;</span>
+                            }
+                        }
+                    </span>
+                }
+                else
+                {
+                    <span class="q-text">@q.Text</span>
+                }
+                <span class="q-pts">(@q.Points pt@(q.Points == 1 ? "" : "s"))</span>
+            </div>
+
+            @if (q.Options.Any())
+            {
+                <div class="options">
+                    @foreach (var opt in q.Options)
+                    {
+                        <div class="option">
+                            <div class="bubble"></div>
+                            <span class="opt-text">@opt</span>
+                        </div>
+                    }
+                </div>
+            }
+            else if (q.Type == "short_answer")
+            {
+                @for (int l = 0; l < 4; l++)
+                {
+                    <div class="write-line"></div>
+                }
+            }
+            else if (q.Type == "word_problem")
+            {
+                <div style="margin:8px 0 0 24px;">
+                    <div style="font-size:9pt;font-weight:600;color:#6b7280;margin-bottom:5px;">Working:</div>
+                    @for (int l = 0; l < 7; l++)
+                    {
+                        <div class="write-line" style="height:21px;"></div>
+                    }
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+                        <span style="font-size:9.5pt;font-weight:600;white-space:nowrap;">Answer:</span>
+                        <div style="border-bottom:1.5px solid #374151;flex:1;height:21px;"></div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+</div><!-- /page -->
+
+</body>
+</html>

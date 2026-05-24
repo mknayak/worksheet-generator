@@ -1,0 +1,98 @@
+@model List<WorksheetTemplate>
+@{
+    ViewData["Title"] = "Worksheet Templates";
+}
+
+<div class="d-flex align-items-center mb-4 gap-3">
+    <h2 class="mb-0 fw-bold"><i class="bi bi-layout-text-sidebar-reverse me-2 text-primary"></i>Worksheet Templates</h2>
+    <a asp-action="Create" class="btn btn-primary btn-sm ms-auto">
+        <i class="bi bi-plus-lg me-1"></i>New Template
+    </a>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="card text-center py-5">
+        <div class="card-body">
+            <i class="bi bi-layout-text-sidebar-reverse display-4 text-muted"></i>
+            <h5 class="mt-3 text-muted">No templates yet</h5>
+            <p class="text-muted small">Templates let you control exactly which question types are generated.</p>
+            <a asp-action="Create" class="btn btn-primary mt-2">
+                <i class="bi bi-plus-lg me-1"></i>Create your first template
+            </a>
+        </div>
+    </div>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (var t in Model)
+        {
+            <div class="col-md-6 col-lg-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex align-items-start mb-2">
+                            <div class="flex-grow-1">
+                                <h5 class="fw-bold mb-1">@t.Name</h5>
+                                @if (!string.IsNullOrEmpty(t.Description))
+                                {
+                                    <p class="text-muted small mb-2">@t.Description</p>
+                                }
+                            </div>
+                            <span class="badge bg-primary ms-2">@t.TotalQuestions Q</span>
+                        </div>
+
+                        <!-- Question type pills -->
+                        <div class="mb-3 d-flex flex-wrap gap-1">
+                            @foreach (var qt in t.QuestionTypes)
+                            {
+                                var badgeClass = qt.Type switch {
+                                    "multiple_choice" => "badge-mc",
+                                    "true_false"      => "badge-tf",
+                                    "fill_blank"      => "badge-fb",
+                                    "short_answer"    => "badge-sa",
+                                    "word_problem"    => "badge-wp",
+                                    _                 => "bg-secondary text-white"
+                                };
+                                <span class="badge badge-type @badgeClass">
+                                    @qt.Count× @WorksheetTemplate.TypeLabel(qt.Type)
+                                </span>
+                            }
+                        </div>
+
+                        <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                            <span class="badge" style="@WorksheetTemplate.DifficultyBadgeStyle(t.Difficulty)font-size:.7rem;">
+                                @WorksheetTemplate.DifficultyLabel(t.Difficulty)
+                            </span>
+                            <span class="text-muted small">
+                                <i class="bi bi-award me-1"></i>@t.TotalPoints pts
+                                <span class="mx-1">·</span>
+                                <i class="bi bi-calendar me-1"></i>@t.CreatedAt.ToString("MMM d, yyyy")
+                            </span>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(t.SpecialInstructions))
+                        {
+                            <div class="alert alert-info py-2 px-3 mb-3 small">
+                                <i class="bi bi-info-circle me-1"></i>@t.SpecialInstructions
+                            </div>
+                        }
+
+                        <div class="d-flex gap-2">
+                            <a asp-action="Edit" asp-route-id="@t.Id" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-pencil me-1"></i>Edit
+                            </a>
+                            <form asp-action="Delete" method="post" class="ms-auto mb-0"
+                                  onsubmit="return confirm('Delete template \'@t.Name\'?')">
+                                <input type="hidden" name="id" value="@t.Id" />
+                                <button class="btn btn-outline-danger btn-sm">
+                                    <i class="bi bi-trash me-1"></i>Delete
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}

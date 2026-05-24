@@ -1,0 +1,259 @@
+@model WorksheetTemplate
+@{
+    // Available question types
+    var allTypes = new[]
+    {
+        ("multiple_choice", "Multiple Choice"),
+        ("true_false",      "True / False"),
+        ("fill_blank",      "Fill in the Blank"),
+        ("short_answer",    "Short Answer"),
+        ("word_problem",    "Word Problem"),
+    };
+
+    // Default points per type when adding a new row
+    var defaultPoints = new Dictionary<string, int>
+    {
+        ["multiple_choice"] = 5,
+        ["true_false"]      = 2,
+        ["fill_blank"]      = 3,
+        ["short_answer"]    = 10,
+        ["word_problem"]    = 15
+    };
+
+    var currentDifficulty = string.IsNullOrEmpty(Model.Difficulty) ? "mixed" : Model.Difficulty;
+}
+
+<!-- Template name -->
+<div class="mb-3">
+    <label class="form-label fw-semibold">Template Name <span class="text-danger">*</span></label>
+    <input type="text" name="name" class="form-control" value="@Model.Name"
+           placeholder="e.g. Science Quiz — Mixed Types" required />
+</div>
+
+<!-- Description -->
+<div class="mb-3">
+    <label class="form-label fw-semibold">Description <span class="text-muted small fw-normal">(optional)</span></label>
+    <input type="text" name="description" class="form-control" value="@Model.Description"
+           placeholder="Brief note about when to use this template" />
+</div>
+
+<!-- ── Difficulty Selector ──────────────────────────────────────────────── -->
+<div class="mb-4">
+    <label class="form-label fw-semibold">Difficulty Level</label>
+    <input type="hidden" name="difficulty" id="difficultyInput" value="@currentDifficulty" />
+
+    <div class="d-flex gap-2 flex-wrap" id="difficultyPicker">
+
+        <button type="button" class="diff-btn @(currentDifficulty == "easy" ? "active" : "")"
+                data-value="easy" onclick="selectDifficulty('easy')">
+            <span class="diff-icon">🟢</span>
+            <span class="diff-label">Easy</span>
+            <span class="diff-desc">Straightforward recall &amp; basic comprehension</span>
+        </button>
+
+        <button type="button" class="diff-btn @(currentDifficulty == "medium" ? "active" : "")"
+                data-value="medium" onclick="selectDifficulty('medium')">
+            <span class="diff-icon">🟡</span>
+            <span class="diff-label">Medium</span>
+            <span class="diff-desc">Some analysis and application required</span>
+        </button>
+
+        <button type="button" class="diff-btn @(currentDifficulty == "hard" ? "active" : "")"
+                data-value="hard" onclick="selectDifficulty('hard')">
+            <span class="diff-icon">🔴</span>
+            <span class="diff-label">Hard</span>
+            <span class="diff-desc">Critical thinking, complex multi-step problems</span>
+        </button>
+
+        <button type="button" class="diff-btn @(currentDifficulty == "mixed" ? "active" : "")"
+                data-value="mixed" onclick="selectDifficulty('mixed')">
+            <span class="diff-icon">🎯</span>
+            <span class="diff-label">Mixed</span>
+            <span class="diff-desc">Spread across easy, medium &amp; hard</span>
+        </button>
+
+    </div>
+
+    <!-- Contextual hint that updates with selection -->
+    <div id="diffHint" class="mt-2 small text-muted d-flex align-items-start gap-1">
+        <i class="bi bi-info-circle flex-shrink-0 mt-1"></i>
+        <span id="diffHintText"></span>
+    </div>
+</div>
+
+<!-- Special instructions for the AI -->
+<div class="mb-4">
+    <label class="form-label fw-semibold">
+        Special Instructions for AI
+        <span class="text-muted small fw-normal">(optional — passed verbatim to the prompt)</span>
+    </label>
+    <textarea name="specialInstructions" class="form-control" rows="2"
+              placeholder="e.g. Focus on real-world applications. Avoid repetitive phrasing.">@Model.SpecialInstructions</textarea>
+</div>
+
+<!-- Question type rows -->
+<div class="mb-3">
+    <div class="d-flex align-items-center mb-2">
+        <label class="form-label fw-semibold mb-0">Question Types</label>
+        <button type="button" class="btn btn-outline-primary btn-sm ms-auto" id="addRowBtn">
+            <i class="bi bi-plus-lg me-1"></i>Add Type
+        </button>
+    </div>
+
+    <div id="qtRows">
+        @if (Model.QuestionTypes.Any())
+        {
+            @foreach (var qt in Model.QuestionTypes)
+            {
+                <div class="qt-row d-flex align-items-center gap-2 mb-2">
+                    <select name="questionType" class="form-select form-select-sm" style="flex:2;" onchange="syncPoints(this)">
+                        @foreach (var (val, label) in allTypes)
+                        {
+                            if (val == qt.Type)
+                            { <option value="@val" selected>@label</option> }
+                            else
+                            { <option value="@val">@label</option> }
+                        }
+                    </select>
+                    <div class="input-group input-group-sm" style="flex:1;max-width:110px;">
+                        <span class="input-group-text">#</span>
+                        <input type="number" name="questionCount" class="form-control" min="1" max="20" value="@qt.Count" />
+                    </div>
+                    <div class="input-group input-group-sm" style="flex:1;max-width:120px;">
+                        <input type="number" name="questionPoints" class="form-control" min="1" max="100" value="@qt.Points" />
+                        <span class="input-group-text">pts</span>
+                    </div>
+                    <button type="button" class="btn btn-outline-danger btn-sm removeRowBtn" title="Remove">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+            }
+        }
+    </div>
+
+    <div class="text-muted small mt-1">
+        <i class="bi bi-info-circle me-1"></i>
+        <strong>#</strong> = number of questions of that type &nbsp;·&nbsp; <strong>pts</strong> = points each
+    </div>
+
+    <!-- Running totals -->
+    <div class="mt-3 p-3 bg-light rounded d-flex gap-4" id="totals">
+        <div>
+            <div class="small text-muted">Total Questions</div>
+            <div class="fw-bold fs-5 text-primary" id="totalQ">0</div>
+        </div>
+        <div>
+            <div class="small text-muted">Total Points</div>
+            <div class="fw-bold fs-5 text-success" id="totalPts">0</div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden template for JS to clone -->
+<template id="rowTemplate">
+    <div class="qt-row d-flex align-items-center gap-2 mb-2">
+        <select name="questionType" class="form-select form-select-sm" style="flex:2;" onchange="syncPoints(this)">
+            @foreach (var (val, label) in allTypes)
+            { <option value="@val">@label</option> }
+        </select>
+        <div class="input-group input-group-sm" style="flex:1;max-width:110px;">
+            <span class="input-group-text">#</span>
+            <input type="number" name="questionCount" class="form-control" min="1" max="20" value="1" />
+        </div>
+        <div class="input-group input-group-sm" style="flex:1;max-width:120px;">
+            <input type="number" name="questionPoints" class="form-control" min="1" max="100" value="5" />
+            <span class="input-group-text">pts</span>
+        </div>
+        <button type="button" class="btn btn-outline-danger btn-sm removeRowBtn" title="Remove">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+</template>
+
+<style>
+.diff-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 10px 14px;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    background: #fff;
+    cursor: pointer;
+    transition: all .15s;
+    min-width: 110px;
+    text-align: center;
+}
+.diff-btn:hover { border-color: #a5b4fc; background: #f5f3ff; }
+.diff-btn.active { border-color: #4f46e5; background: #eef2ff; }
+.diff-btn[data-value="easy"].active    { border-color: #16a34a; background: #f0fdf4; }
+.diff-btn[data-value="medium"].active  { border-color: #ca8a04; background: #fefce8; }
+.diff-btn[data-value="hard"].active    { border-color: #dc2626; background: #fef2f2; }
+.diff-btn[data-value="mixed"].active   { border-color: #7c3aed; background: #f5f3ff; }
+.diff-icon  { font-size: 1.4rem; line-height: 1; }
+.diff-label { font-weight: 700; font-size: .9rem; color: #111; }
+.diff-desc  { font-size: .7rem; color: #6b7280; line-height: 1.3; }
+</style>
+
+<script>
+const defaultPoints = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(defaultPoints));
+
+const diffHints = {
+    easy:   "All questions will target beginner level — direct recall, simple definitions, and basic comprehension. Good for formative quizzes or younger students.",
+    medium: "Questions will require some application and understanding beyond simple recall. Suitable for standard classroom assessments.",
+    hard:   "Questions will demand critical thinking, multi-step reasoning, and synthesis. Ideal for end-of-unit tests or advanced learners.",
+    mixed:  "The AI will generate a spread across easy, medium and hard (roughly 30 / 50 / 20). Best for a comprehensive review."
+};
+
+function selectDifficulty(val) {
+    document.getElementById('difficultyInput').value = val;
+    document.querySelectorAll('.diff-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.value === val));
+    document.getElementById('diffHintText').textContent = diffHints[val] ?? '';
+}
+
+// Init hint text on page load
+selectDifficulty(document.getElementById('difficultyInput').value || 'mixed');
+
+// ── Question type rows ───────────────────────────────────────────────────
+
+function syncPoints(sel) {
+    const pts = defaultPoints[sel.value] ?? 5;
+    const row = sel.closest('.qt-row');
+    row.querySelector('[name="questionPoints"]').value = pts;
+    updateTotals();
+}
+
+function updateTotals() {
+    let totalQ = 0, totalPts = 0;
+    document.querySelectorAll('.qt-row').forEach(row => {
+        const count  = parseInt(row.querySelector('[name="questionCount"]').value)  || 0;
+        const points = parseInt(row.querySelector('[name="questionPoints"]').value) || 0;
+        totalQ   += count;
+        totalPts += count * points;
+    });
+    document.getElementById('totalQ').textContent   = totalQ;
+    document.getElementById('totalPts').textContent = totalPts;
+}
+
+document.getElementById('addRowBtn').addEventListener('click', () => {
+    const tmpl = document.getElementById('rowTemplate').content.cloneNode(true);
+    document.getElementById('qtRows').appendChild(tmpl);
+    bindRemove();
+    updateTotals();
+});
+
+function bindRemove() {
+    document.querySelectorAll('.removeRowBtn').forEach(btn => {
+        btn.onclick = () => {
+            btn.closest('.qt-row').remove();
+            updateTotals();
+        };
+    });
+}
+
+document.getElementById('qtRows').addEventListener('input', updateTotals);
+bindRemove();
+updateTotals();
+</script>

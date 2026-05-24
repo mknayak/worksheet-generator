@@ -1,0 +1,186 @@
+@model WorksheetViewModel
+@{
+    Layout = null;
+    var ws = Model.Worksheet;
+    var student = Model.Student;
+
+    string TypeLabel(string t) => t switch {
+        "multiple_choice" => "Multiple Choice",
+        "true_false"      => "True / False",
+        "fill_blank"      => "Fill in the Blank",
+        "short_answer"    => "Short Answer",
+        "word_problem"    => "Word Problem",
+        _                 => t
+    };
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ws.Title — Answer Key</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #111; background: #fff; }
+
+        .download-bar {
+            position: sticky; top: 0; z-index: 100;
+            background: #15803d; color: #fff;
+            padding: 10px 24px; display: flex; gap: 10px; align-items: center;
+        }
+        .download-bar button {
+            background: #fff; color: #15803d; border: none;
+            padding: 6px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 13px;
+        }
+        .download-bar button:hover { background: #dcfce7; }
+        .download-bar a.back { color: #bbf7d0; text-decoration: none; font-size: 13px; margin-right: auto; }
+
+        .page { max-width: 800px; margin: 24px auto; padding: 0 24px; }
+
+        .ws-header { border-bottom: 3px solid #15803d; padding-bottom: 14px; margin-bottom: 18px; }
+        .ws-header .badge-key {
+            display: inline-block; background: #15803d; color: #fff;
+            font-size: 8pt; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .1em; padding: 3px 10px; border-radius: 20px; margin-bottom: 6px;
+        }
+        .ws-header .subject { font-size: 9pt; text-transform: uppercase; letter-spacing: .08em; color: #6b7280; }
+        .ws-header h1 { font-size: 20pt; font-weight: 700; color: #14532d; margin: 4px 0; }
+        .ws-header .meta { font-size: 9pt; color: #9ca3af; margin-top: 4px; }
+
+        .student-info {
+            border: 1px solid #d1d5db; border-radius: 6px; padding: 10px 14px;
+            margin-bottom: 16px; background: #f9fafb; font-size: 10pt;
+            display: flex; flex-wrap: wrap; gap: 12px;
+        }
+        .student-info .si { display: flex; flex-direction: column; }
+        .student-info .si-label { font-size: 8pt; color: #9ca3af; text-transform: uppercase; letter-spacing: .05em; }
+        .student-info .si-val { font-weight: 600; }
+
+        .question { margin-bottom: 16px; page-break-inside: avoid; break-inside: avoid; }
+        .question .q-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+        .question .q-num { font-weight: 700; font-size: 11pt; min-width: 24px; }
+        .question .q-type-tag {
+            font-size: 7.5pt; font-weight: 600; text-transform: uppercase;
+            letter-spacing: .06em; padding: 2px 6px; border-radius: 4px;
+            background: #e5e7eb; color: #374151;
+        }
+        .question .q-pts { font-size: 8.5pt; color: #9ca3af; margin-left: auto; }
+        .question .q-text { font-size: 10.5pt; margin-left: 24px; color: #374151; }
+
+        .answer-box {
+            margin: 8px 0 0 24px;
+            background: #f0fdf4;
+            border-left: 4px solid #22c55e;
+            border-radius: 0 6px 6px 0;
+            padding: 8px 14px;
+        }
+        .answer-box .ans-label {
+            font-size: 8pt; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .06em; color: #15803d; margin-bottom: 3px;
+        }
+        .answer-box .ans-text { font-size: 10.5pt; color: #111; font-weight: 600; }
+
+        .section-divider { border: none; border-top: 1px solid #e5e7eb; margin: 20px 0; }
+
+        @@media print {
+            .download-bar { display: none !important; }
+            .page { margin: 0; padding: 12px; max-width: 100%; }
+            body { font-size: 10.5pt; }
+            .question { page-break-inside: avoid; break-inside: avoid; }
+            .answer-box { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Download Bar -->
+<div class="download-bar">
+    <a href="/Worksheet/View/@ws.Id" class="back">← Back to view</a>
+    <button onclick="window.print()">⬇ Save as PDF / Print</button>
+    <span style="font-size:12px;opacity:.75;">Tip: choose "Save as PDF" as your printer for a clean PDF</span>
+</div>
+
+<div class="page" id="answerContent">
+
+    <!-- Header -->
+    <div class="ws-header">
+        <div>
+            <div class="badge-key">Answer Key — Teacher Copy</div>
+        </div>
+        <div class="subject">@ws.Subject</div>
+        <h1>@ws.Title</h1>
+        <div style="color:#166534; font-size:11pt;">@ws.Topic</div>
+        <div class="meta">
+            Date: @ws.GeneratedAt.ToString("MMMM d, yyyy") &nbsp;&bull;&nbsp;
+            @ws.Questions.Count questions &nbsp;&bull;&nbsp;
+            Total: @ws.TotalPoints points
+        </div>
+    </div>
+
+    <!-- Student Info (if profile set) -->
+    @if (student != null)
+    {
+        <div class="student-info">
+            <div class="si"><span class="si-label">Student</span><span class="si-val">@student.Name</span></div>
+            @if (!string.IsNullOrEmpty(student.ClassName))
+            { <div class="si"><span class="si-label">Class</span><span class="si-val">@student.ClassName</span></div> }
+            @if (!string.IsNullOrEmpty(student.Grade))
+            { <div class="si"><span class="si-label">Grade</span><span class="si-val">@student.Grade</span></div> }
+            @if (!string.IsNullOrEmpty(student.School))
+            { <div class="si"><span class="si-label">School</span><span class="si-val">@student.School</span></div> }
+        </div>
+    }
+
+    <!-- Questions + Answers -->
+    @for (int i = 0; i < ws.Questions.Count; i++)
+    {
+        var q = ws.Questions[i];
+
+        if (i > 0 && ws.Questions[i - 1].Type != q.Type)
+        {
+            <hr class="section-divider" />
+        }
+
+        <div class="question">
+            <div class="q-head">
+                <span class="q-num">@(i + 1).</span>
+                <span class="q-type-tag">@TypeLabel(q.Type)</span>
+                <span class="q-pts">(@q.Points pts)</span>
+            </div>
+            <div class="q-text">@q.Text</div>
+
+            @if (q.Type == "word_problem")
+            {
+                <!-- Stepped worked solution for word problems -->
+                <div class="answer-box" style="background:#fff7ed;border-left:4px solid #f97316;">
+                    <div class="ans-label" style="color:#c2410c;">✎ Worked Solution</div>
+                    @{ var steps = q.Answer.Split('\n'); }
+                    @foreach (var step in steps)
+                    {
+                        @if (step.StartsWith("Answer:") || step.StartsWith("answer:"))
+                        {
+                            <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #fed7aa;">
+                                <span class="ans-text" style="font-weight:700;">@step</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="ans-text" style="font-weight:400;color:#374151;">@step</div>
+                        }
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="answer-box">
+                    <div class="ans-label">✓ Answer</div>
+                    <div class="ans-text">@q.Answer</div>
+                </div>
+            }
+        </div>
+    }
+
+</div><!-- /page -->
+
+</body>
+</html>

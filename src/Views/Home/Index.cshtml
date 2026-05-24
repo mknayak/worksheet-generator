@@ -1,0 +1,321 @@
+@model GenerateWorksheetViewModel
+@{
+    ViewData["Title"] = "Home";
+    var recentWorksheets = ViewBag.RecentWorksheets as List<WorksheetSummary>   ?? new();
+    var recentMaterials  = ViewBag.RecentMaterials  as List<SessionMaterial>    ?? new();
+    var templates        = ViewBag.Templates        as List<WorksheetTemplate>  ?? new();
+}
+
+<div class="row g-4">
+
+    <!-- Upload / Library tabs -->
+    <div class="col-lg-7">
+        <div class="card h-100">
+            <!-- Tab header -->
+            <div class="card-header p-0 border-0" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);">
+                <ul class="nav nav-tabs border-0 px-3 pt-2" id="mainTabs">
+                    <li class="nav-item">
+                        <button class="nav-link active text-white fw-semibold" id="uploadTab"
+                                data-bs-toggle="tab" data-bs-target="#uploadPane">
+                            <i class="bi bi-cloud-upload me-1"></i>Upload PDF
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link text-white" id="libraryTab"
+                                data-bs-toggle="tab" data-bs-target="#libraryPane">
+                            <i class="bi bi-book me-1"></i>From Library
+                            @if (recentMaterials.Any())
+                            {
+                                <span class="badge bg-white text-primary ms-1">@recentMaterials.Count</span>
+                            }
+                        </button>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="tab-content card-body p-4">
+
+                <!-- ── Upload New PDF tab ───────────────────────────────── -->
+                <div class="tab-pane fade show active" id="uploadPane">
+                    <form asp-controller="Worksheet" asp-action="Generate" method="post"
+                          enctype="multipart/form-data" id="uploadForm">
+
+                        <!-- Step 1: Student Profile -->
+                        <div class="d-flex align-items-start gap-3 mb-4">
+                            <div class="step-circle">1</div>
+                            <div class="flex-grow-1">
+                                <label class="form-label fw-semibold">Student Profile <span class="text-muted fw-normal">(optional)</span></label>
+                                @if (!Model.Profiles.Any())
+                                {
+                                    <div class="alert alert-info py-2 mb-0">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        <a asp-controller="Profile" asp-action="Create">Create a profile</a> to pre-fill student info.
+                                    </div>
+                                }
+                                else
+                                {
+                                    <select name="profileId" class="form-select">
+                                        <option value="">— No profile —</option>
+                                        @foreach (var p in Model.Profiles)
+                                        {
+                                            <option value="@p.Id">@p.Name — @p.ClassName (@p.School)</option>
+                                        }
+                                    </select>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Step 3: PDF Upload -->
+                        <div class="d-flex align-items-start gap-3 mb-4">
+                            <div class="step-circle">3</div>
+                            <div class="flex-grow-1">
+                                <label class="form-label fw-semibold">PDF File</label>
+                                <div id="dropZone" class="border-2 rounded-3 p-4 text-center"
+                                     style="border:2px dashed #c7d2fe;background:#f5f3ff;cursor:pointer;">
+                                    <i class="bi bi-file-earmark-pdf text-danger" style="font-size:2.5rem;"></i>
+                                    <p class="mb-1 mt-2 fw-semibold">Drop PDF here or click to browse</p>
+                                    <p class="text-muted small mb-3">Text-based PDFs up to 20 MB</p>
+                                    <input type="file" name="pdfFile" id="pdfFile" accept=".pdf"
+                                           style="display:none;" required />
+                                    <button type="button" class="btn btn-outline-primary btn-sm"
+                                            onclick="document.getElementById('pdfFile').click()">
+                                        <i class="bi bi-folder2-open me-1"></i>Browse
+                                    </button>
+                                </div>
+                                <div id="fileInfo" class="mt-2 d-none">
+                                    <div class="alert alert-success py-2 d-flex align-items-center gap-2 mb-0">
+                                        <i class="bi bi-file-check-fill text-success"></i>
+                                        <span id="fileName" class="small fw-semibold"></span>
+                                        <span id="fileSize" class="text-muted small ms-auto"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 3: Save to Library -->
+                        <div class="d-flex align-items-start gap-3 mb-4">
+                            <div class="step-circle">3</div>
+                            <div class="flex-grow-1">
+                                <label class="form-label fw-semibold">Save to Library</label>
+                                <p class="text-muted small mb-2">Tag this PDF so you can re-generate worksheets from it later without re-uploading.</p>
+                                <div class="row g-2">
+                                    <div class="col-12">
+                                        <input type="text" name="materialTitle" class="form-control form-control-sm"
+                                               placeholder="Title, e.g. Chapter 3 – Photosynthesis" id="materialTitle" />
+                                    </div>
+                                    <div class="col-6">
+                                        <input type="text" name="materialSubject" class="form-control form-control-sm"
+                                               placeholder="Subject, e.g. Biology" />
+                                    </div>
+                                    <div class="col-6">
+                                        <input type="text" name="materialClass" class="form-control form-control-sm"
+                                               placeholder="Class, e.g. Grade 10" />
+                                    </div>
+                                </div>
+                                <div class="form-text">Leave blank and the filename is used as the title. PDF text is always saved.</div>
+                            </div>
+                        </div>
+
+                        <!-- Step 4: Template (optional) -->
+                        <div class="d-flex align-items-start gap-3 mb-4">
+                            <div class="step-circle">4</div>
+                            <div class="flex-grow-1">
+                                <label class="form-label fw-semibold">
+                                    Worksheet Template
+                                    <span class="text-muted fw-normal">(optional)</span>
+                                </label>
+                                @if (!templates.Any())
+                                {
+                                    <div class="alert alert-light py-2 mb-0 small">
+                                        <i class="bi bi-layout-text-sidebar-reverse me-1"></i>
+                                        <a asp-controller="Template" asp-action="Create">Create a template</a>
+                                        to control which question types are generated.
+                                    </div>
+                                }
+                                else
+                                {
+                                    <select name="templateId" class="form-select form-select-sm">
+                                        <option value="">— Default (AI chooses mix) —</option>
+                                        @foreach (var t in templates)
+                                        {
+                                            <option value="@t.Id">@t.Name (@t.TotalQuestions Qs · @t.TotalPoints pts)</option>
+                                        }
+                                    </select>
+                                    <div class="form-text">
+                                        <a asp-controller="Template" asp-action="Index" class="small">Manage templates →</a>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Step 5: Generate -->
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="step-circle">5</div>
+                            <div class="flex-grow-1">
+                                <button type="submit" class="btn btn-primary btn-lg w-100" id="generateBtn">
+                                    <i class="bi bi-magic me-2"></i>Generate Worksheet
+                                </button>
+                                <p class="text-muted small mt-2 mb-0 text-center">
+                                    <i class="bi bi-clock me-1"></i>Usually 10–30 seconds
+                                </p>
+                            </div>
+                        </div>
+
+                        <div id="loadingMsg" class="text-center mt-4 d-none">
+                            <div class="spinner-border text-primary" role="status"></div>
+                            <p class="mt-2 text-muted" id="loadingText">Analysing PDF and generating worksheet…</p>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- ── From Library tab ────────────────────────────────── -->
+                <div class="tab-pane fade" id="libraryPane">
+                    @if (!recentMaterials.Any())
+                    {
+                        <div class="text-center py-4 text-muted">
+                            <i class="bi bi-book d-block mb-2" style="font-size:2.5rem;"></i>
+                            <p>No materials in the library yet.<br>Upload a PDF first and it will appear here.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-3">Select a saved PDF session to view its worksheets or generate a new one.</p>
+                        <div class="d-flex flex-column gap-2">
+                            @foreach (var mat in recentMaterials)
+                            {
+                                <a asp-controller="Material" asp-action="Detail" asp-route-id="@mat.Id"
+                                   class="list-group-item list-group-item-action rounded border p-3 text-decoration-none">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <div class="fw-semibold text-dark">@mat.Title</div>
+                                            <div class="d-flex gap-1 mt-1">
+                                                @if (!string.IsNullOrEmpty(mat.Subject))
+                                                {
+                                                    <span class="badge" style="background:#ede9fe;color:#4f46e5;font-size:.7rem;">@mat.Subject</span>
+                                                }
+                                                @if (!string.IsNullOrEmpty(mat.ClassName))
+                                                {
+                                                    <span class="badge" style="background:#dcfce7;color:#15803d;font-size:.7rem;">@mat.ClassName</span>
+                                                }
+                                            </div>
+                                            <small class="text-muted">@mat.OriginalFileName</small>
+                                        </div>
+                                        <div class="text-end ms-2">
+                                            <small class="text-muted">@mat.UploadedAt.ToString("MMM d")</small>
+                                            <div><span class="badge bg-primary">View →</span></div>
+                                        </div>
+                                    </div>
+                                </a>
+                            }
+                        </div>
+                        <div class="text-center mt-3">
+                            <a asp-controller="Material" asp-action="Index" class="small">Browse full library →</a>
+                        </div>
+                    }
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Right column -->
+    <div class="col-lg-5 d-flex flex-column gap-4">
+
+        <!-- Recent Worksheets -->
+        <div class="card">
+            <div class="card-header bg-white fw-semibold py-3">
+                <i class="bi bi-clock-history me-2 text-primary"></i>Recent Worksheets
+            </div>
+            <div class="list-group list-group-flush rounded-bottom">
+                @if (!recentWorksheets.Any())
+                {
+                    <div class="list-group-item text-center text-muted py-4">
+                        <i class="bi bi-journal-x d-block mb-2" style="font-size:2rem;"></i>
+                        No worksheets yet.
+                    </div>
+                }
+                @foreach (var ws in recentWorksheets)
+                {
+                    <a asp-controller="Worksheet" asp-action="View" asp-route-id="@ws.Id"
+                       class="list-group-item list-group-item-action py-3">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <div class="fw-semibold text-dark">@ws.Title</div>
+                                <small class="text-muted">@ws.Subject &bull; @ws.QuestionCount Qs &bull; @ws.TotalPoints pts</small>
+                                @if (!string.IsNullOrEmpty(ws.StudentName) && ws.StudentName != "—")
+                                {
+                                    <div><small class="text-primary"><i class="bi bi-person me-1"></i>@ws.StudentName</small></div>
+                                }
+                            </div>
+                            <small class="text-muted text-nowrap ms-2">@ws.GeneratedAt.ToString("MMM d")</small>
+                        </div>
+                    </a>
+                }
+            </div>
+            @if (recentWorksheets.Any())
+            {
+                <div class="card-footer text-center bg-white">
+                    <a asp-controller="Worksheet" asp-action="History" class="small">View all worksheets →</a>
+                </div>
+            }
+        </div>
+
+        <!-- Tips -->
+        <div class="card border-0" style="background:linear-gradient(135deg,#fef3c7,#fff7ed);">
+            <div class="card-body p-3">
+                <h6 class="fw-semibold mb-2"><i class="bi bi-lightbulb me-1 text-warning"></i>Tips</h6>
+                <ul class="list-unstyled mb-0 small text-muted">
+                    <li class="mb-1"><i class="bi bi-check2 text-success me-1"></i>Tag uploads with Subject &amp; Class to find them in the Library later</li>
+                    <li class="mb-1"><i class="bi bi-check2 text-success me-1"></i>Re-generate from the Library to get fresh question sets from the same content</li>
+                    <li class="mb-1"><i class="bi bi-check2 text-success me-1"></i>Use text-based PDFs — scanned images have no extractable text</li>
+                    <li><i class="bi bi-check2 text-success me-1"></i>Create a student profile to auto-fill worksheet headers</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<style>
+    #mainTabs .nav-link.active { background: rgba(255,255,255,.15); border-radius: 8px 8px 0 0; }
+</style>
+<script>
+    const fileInput  = document.getElementById('pdfFile');
+    const dropZone   = document.getElementById('dropZone');
+    const fileInfo   = document.getElementById('fileInfo');
+    const fileNameEl = document.getElementById('fileName');
+    const fileSizeEl = document.getElementById('fileSize');
+    const titleInput = document.getElementById('materialTitle');
+    const form       = document.getElementById('uploadForm');
+    const genBtn     = document.getElementById('generateBtn');
+    const loading    = document.getElementById('loadingMsg');
+    const loadText   = document.getElementById('loadingText');
+
+    fileInput.addEventListener('change', showFile);
+    dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.style.background='#ede9fe'; });
+    dropZone.addEventListener('dragleave', ()  => { dropZone.style.background='#f5f3ff'; });
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault(); dropZone.style.background='#f5f3ff';
+        if (e.dataTransfer.files.length) {
+            const dt = new DataTransfer(); dt.items.add(e.dataTransfer.files[0]);
+            fileInput.files = dt.files; showFile();
+        }
+    });
+
+    function showFile() {
+        const f = fileInput.files[0]; if (!f) return;
+        fileNameEl.textContent = f.name;
+        fileSizeEl.textContent = (f.size/1024/1024).toFixed(2)+' MB';
+        fileInfo.classList.remove('d-none');
+        if (!titleInput.value)
+            titleInput.value = f.name.replace(/\.pdf$/i,'').replace(/[-_]/g,' ');
+    }
+
+    form.addEventListener('submit', () => {
+        genBtn.disabled = true;
+        genBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating…';
+        loadText.textContent = 'Analysing PDF with OpenAI GPT-4o…';
+        loading.classList.remove('d-none');
+    });
+</script>
+}

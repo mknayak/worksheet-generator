@@ -1,0 +1,26 @@
+@model WorksheetTemplate
+@{
+    ViewData["Title"] = "New Template";
+}
+
+<div class="mb-4">
+    <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Back to Templates
+    </a>
+</div>
+
+<div class="card" style="max-width:760px;">
+    <div class="card-header py-3" style="background:linear-gradient(135deg,#1e1b4b,#4f46e5);color:#fff;">
+        <h5 class="mb-0 fw-bold"><i class="bi bi-plus-circle me-2"></i>Create Worksheet Template</h5>
+    </div>
+    <div class="card-body p-4">
+        <form method="post" asp-action="Create">
+            @Html.AntiForgeryToken()
+            @await Html.PartialAsync("_TemplateForm", Model)
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Save Template</button>
+                <a asp-action="Index" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
