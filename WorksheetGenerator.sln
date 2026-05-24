@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.7.11819.209 insiders
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorksheetGenerator", "src\WorksheetGenerator.csproj", "{6ABB7B15-CBFD-A2D3-F4FE-DC49FEC4289F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6ABB7B15-CBFD-A2D3-F4FE-DC49FEC4289F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6ABB7B15-CBFD-A2D3-F4FE-DC49FEC4289F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6ABB7B15-CBFD-A2D3-F4FE-DC49FEC4289F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6ABB7B15-CBFD-A2D3-F4FE-DC49FEC4289F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {88F299EF-4312-407B-B01D-63400EFD0D66}
+	EndGlobalSection
+EndGlobal
