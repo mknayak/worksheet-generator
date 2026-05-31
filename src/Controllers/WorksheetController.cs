@@ -37,17 +37,20 @@ public class WorksheetController : Controller
     [HttpPost]
     [RequestSizeLimit(20 * 1024 * 1024)]
     public async Task<IActionResult> Generate(
-        string? profileId, IFormFile? pdfFile,
+        string? profileId, IFormFile? pdfFile, string? manualContent,
         string? materialTitle, string? materialSubject, string? materialClass,
-        string? templateId)
+        string? templateId, string? sampleQuestions)
     {
-        if (pdfFile == null || pdfFile.Length == 0)
+        // Determine input mode: PDF upload or manual text
+        bool isManual = !string.IsNullOrWhiteSpace(manualContent);
+
+        if (!isManual && (pdfFile == null || pdfFile.Length == 0))
         {
-            TempData["Error"] = "Please select a PDF file to upload.";
+            TempData["Error"] = "Please upload a PDF or enter content manually.";
             return RedirectToAction("Index", "Home");
         }
 
-        if (!pdfFile.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+        if (!isManual && !pdfFile!.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
         {
             TempData["Error"] = "Only PDF files are supported.";
             return RedirectToAction("Index", "Home");
@@ -62,34 +65,52 @@ public class WorksheetController : Controller
 
         try
         {
-            // Step 1: Extract text from PDF
-            string pdfText;
-            using (var stream = pdfFile.OpenReadStream())
-                pdfText = _pdfExtraction.ExtractText(stream);
+            string sourceText;
+            string sourceFileName;
 
-            if (string.IsNullOrWhiteSpace(pdfText) || pdfText.Length < 50)
+            if (isManual)
             {
-                TempData["Error"] = "Could not extract readable text from the PDF. Make sure it is a text-based PDF (not a scanned image).";
-                return RedirectToAction("Index", "Home");
+                sourceText     = manualContent!.Trim();
+                sourceFileName = "manual-input";
+
+                if (sourceText.Length < 20)
+                {
+                    TempData["Error"] = "Please enter more content — at least a few sentences are needed to generate questions.";
+                    return RedirectToAction("Index", "Home");
+                }
+            }
+            else
+            {
+                sourceFileName = pdfFile!.FileName;
+                using (var stream = pdfFile.OpenReadStream())
+                    sourceText = _pdfExtraction.ExtractText(stream);
+
+                if (string.IsNullOrWhiteSpace(sourceText) || sourceText.Length < 50)
+                {
+                    TempData["Error"] = "Could not extract readable text from the PDF. Make sure it is a text-based PDF (not a scanned image).";
+                    return RedirectToAction("Index", "Home");
+                }
             }
 
-            // Step 2: Save PDF text as a library material
+            // Save as a library material
             var material = new SessionMaterial
             {
-                Title            = string.IsNullOrWhiteSpace(materialTitle) ? Path.GetFileNameWithoutExtension(pdfFile.FileName) : materialTitle,
-                Subject          = materialSubject ?? string.Empty,
-                ClassName        = materialClass   ?? string.Empty,
-                OriginalFileName = pdfFile.FileName,
-                ExtractedText    = pdfText
+                Title            = string.IsNullOrWhiteSpace(materialTitle)
+                                       ? (isManual ? "Manual Input" : Path.GetFileNameWithoutExtension(pdfFile!.FileName))
+                                       : materialTitle,
+                Subject          = materialSubject  ?? string.Empty,
+                ClassName        = materialClass    ?? string.Empty,
+                OriginalFileName = sourceFileName,
+                ExtractedText    = sourceText
             };
             await _materialStorage.SaveAsync(material);
 
-            // Step 3: Generate worksheet via AI (with optional template)
-            var worksheet = await aiService.GenerateWorksheetAsync(pdfText, pdfFile.FileName, template);
+            // Generate worksheet via AI
+            var samples   = string.IsNullOrWhiteSpace(sampleQuestions) ? null : sampleQuestions.Trim();
+            var worksheet = await aiService.GenerateWorksheetAsync(sourceText, sourceFileName, template, samples);
             worksheet.StudentProfileId  = profileId ?? string.Empty;
             worksheet.SessionMaterialId = material.Id;
 
-            // Step 4: Save worksheet
             await _worksheetStorage.SaveAsync(worksheet);
 
             return RedirectToAction(nameof(View), new { id = worksheet.Id });

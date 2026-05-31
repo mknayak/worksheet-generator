@@ -23,27 +23,52 @@
 }
 
 <!-- Action Bar -->
-<div class="d-flex flex-wrap gap-2 mb-4 no-print align-items-center">
-    <a asp-controller="Home" asp-action="Index" class="btn btn-outline-secondary btn-sm">
-        <i class="bi bi-arrow-left me-1"></i>Home
-    </a>
-    <span class="text-muted small me-auto mt-1">
+<div class="mb-4 no-print">
+    <div class="text-muted small mb-2">
         Generated @ws.GeneratedAt.ToString("MMM d, yyyy 'at' h:mm tt") from <em>@ws.SourceFileName</em>
-    </span>
-    <a asp-action="PrintWorksheet" asp-route-id="@ws.Id" class="btn btn-primary btn-sm" target="_blank">
-        <i class="bi bi-file-earmark-arrow-down me-1"></i>Download Worksheet PDF
-    </a>
-    <a asp-action="PrintAnswers" asp-route-id="@ws.Id" class="btn btn-success btn-sm" target="_blank">
-        <i class="bi bi-key me-1"></i>Download Answer Key
-    </a>
-    <a asp-action="DownloadJson" asp-route-id="@ws.Id" class="btn btn-outline-dark btn-sm">
-        <i class="bi bi-filetype-json me-1"></i>JSON
-    </a>
-    <form asp-action="Delete" method="post" class="mb-0"
-          onsubmit="return confirm('Delete this worksheet permanently?')">
-        <input type="hidden" name="id" value="@ws.Id" />
-        <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash me-1"></i>Delete</button>
-    </form>
+    </div>
+    <!-- Mobile: stacked buttons -->
+    <div class="d-flex flex-column gap-2 d-sm-none">
+        <a asp-action="PrintWorksheet" asp-route-id="@ws.Id" class="btn btn-primary" target="_blank">
+            <i class="bi bi-file-earmark-arrow-down me-1"></i>Download Worksheet PDF
+        </a>
+        <a asp-action="PrintAnswers" asp-route-id="@ws.Id" class="btn btn-success" target="_blank">
+            <i class="bi bi-key me-1"></i>Download Answer Key
+        </a>
+        <div class="d-flex gap-2">
+            <a asp-controller="Home" asp-action="Index" class="btn btn-outline-secondary flex-grow-1">
+                <i class="bi bi-arrow-left me-1"></i>Home
+            </a>
+            <a asp-action="DownloadJson" asp-route-id="@ws.Id" class="btn btn-outline-dark flex-grow-1">
+                <i class="bi bi-filetype-json me-1"></i>JSON
+            </a>
+            <form asp-action="Delete" method="post" class="flex-grow-1"
+                  onsubmit="return confirm('Delete this worksheet permanently?')">
+                <input type="hidden" name="id" value="@ws.Id" />
+                <button class="btn btn-outline-danger w-100"><i class="bi bi-trash me-1"></i>Delete</button>
+            </form>
+        </div>
+    </div>
+    <!-- Desktop: inline buttons -->
+    <div class="d-none d-sm-flex flex-wrap gap-2 align-items-center">
+        <a asp-controller="Home" asp-action="Index" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Home
+        </a>
+        <a asp-action="PrintWorksheet" asp-route-id="@ws.Id" class="btn btn-primary btn-sm" target="_blank">
+            <i class="bi bi-file-earmark-arrow-down me-1"></i>Download Worksheet PDF
+        </a>
+        <a asp-action="PrintAnswers" asp-route-id="@ws.Id" class="btn btn-success btn-sm" target="_blank">
+            <i class="bi bi-key me-1"></i>Download Answer Key
+        </a>
+        <a asp-action="DownloadJson" asp-route-id="@ws.Id" class="btn btn-outline-dark btn-sm">
+            <i class="bi bi-filetype-json me-1"></i>JSON
+        </a>
+        <form asp-action="Delete" method="post" class="mb-0"
+              onsubmit="return confirm('Delete this worksheet permanently?')">
+            <input type="hidden" name="id" value="@ws.Id" />
+            <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash me-1"></i>Delete</button>
+        </form>
+    </div>
 </div>
 
 <!-- Worksheet Preview Card -->

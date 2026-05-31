@@ -91,6 +91,24 @@
                         }
                     </div>
 
+                    <!-- Sample Questions -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <label class="form-label small fw-semibold mb-0">
+                                Sample Questions <span class="text-muted fw-normal">(optional)</span>
+                            </label>
+                            <button type="button" class="btn btn-link btn-sm py-0 text-muted"
+                                    data-bs-toggle="collapse" data-bs-target="#sampleQuestionsCollapse">
+                                Add samples
+                            </button>
+                        </div>
+                        <div class="collapse" id="sampleQuestionsCollapse">
+                            <textarea name="sampleQuestions" class="form-control form-control-sm mt-2"
+                                      rows="5" placeholder="Paste a few example questions here. The AI will generate new questions in the same style, format, and difficulty level.&#10;&#10;E.g.:&#10;1. What is the capital of France?&#10;2. True or False: Water boils at 100°C.&#10;3. The _____ is the powerhouse of the cell."></textarea>
+                            <div class="form-text">One question per line. The AI will match style and difficulty, not copy them.</div>
+                        </div>
+                    </div>
+
                     <button type="submit" class="btn btn-primary w-100" id="genBtn">
                         <i class="bi bi-magic me-1"></i>Generate Worksheet
                     </button>
@@ -135,12 +153,46 @@
             {
                 <div class="card-body text-center text-muted py-5">
                     <i class="bi bi-journal-x d-block mb-2" style="font-size:2rem;"></i>
-                    No worksheets yet — use the form on the left to generate the first one.
+                    No worksheets yet — use the form above to generate the first one.
                 </div>
             }
             else
             {
-                <div class="table-responsive">
+                <!-- Mobile cards (xs–sm) -->
+                <div class="d-md-none p-3 d-flex flex-column gap-3">
+                    @foreach (var ws in Model.Worksheets)
+                    {
+                        <div class="border rounded p-3">
+                            <div class="fw-semibold mb-1">@ws.Title</div>
+                            <div class="text-muted small mb-1">@ws.Topic</div>
+                            <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+                                <span class="badge bg-light text-dark border">@ws.QuestionCount Qs &bull; @ws.TotalPoints pts</span>
+                                @if (!string.IsNullOrEmpty(ws.StudentName) && ws.StudentName != "—")
+                                {
+                                    <span class="badge bg-light text-primary border"><i class="bi bi-person me-1"></i>@ws.StudentName</span>
+                                }
+                                <span class="text-muted small ms-auto">@ws.GeneratedAt.ToString("MMM d")</span>
+                            </div>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <a asp-controller="Worksheet" asp-action="View" asp-route-id="@ws.Id"
+                                   class="btn btn-outline-primary btn-sm flex-grow-1">
+                                    <i class="bi bi-eye me-1"></i>View
+                                </a>
+                                <a asp-controller="Worksheet" asp-action="PrintWorksheet" asp-route-id="@ws.Id"
+                                   class="btn btn-outline-primary btn-sm flex-grow-1" target="_blank">
+                                    <i class="bi bi-file-earmark-arrow-down me-1"></i>Worksheet
+                                </a>
+                                <a asp-controller="Worksheet" asp-action="PrintAnswers" asp-route-id="@ws.Id"
+                                   class="btn btn-outline-success btn-sm flex-grow-1" target="_blank">
+                                    <i class="bi bi-key me-1"></i>Answers
+                                </a>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- Desktop table (md+) -->
+                <div class="table-responsive d-none d-md-block">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr>

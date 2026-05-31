@@ -14,8 +14,13 @@ public interface IAiWorksheetService
     ///   Optional template controlling which question types and how many to generate.
     ///   When null the AI uses its own judgment (12-15 mixed questions).
     /// </param>
+    /// <param name="sampleQuestions">
+    ///   Optional sample questions provided by the user. The AI will generate
+    ///   new questions in a similar style, format, and difficulty.
+    /// </param>
     Task<Worksheet> GenerateWorksheetAsync(
         string             pdfContent,
         string             sourceFileName,
-        WorksheetTemplate? template = null);
+        WorksheetTemplate? template        = null,
+        string?            sampleQuestions = null);
 }

@@ -23,7 +23,8 @@ public class ClaudeAiService : IAiWorksheetService
     public async Task<Worksheet> GenerateWorksheetAsync(
         string pdfContent,
         string sourceFileName,
-        WorksheetTemplate? template = null)
+        WorksheetTemplate? template        = null,
+        string?            sampleQuestions = null)
     {
         var apiKey = _configuration["Claude:ApiKey"]
             ?? throw new InvalidOperationException("Claude API key not configured. Set Claude:ApiKey in appsettings.json.");
@@ -31,7 +32,7 @@ public class ClaudeAiService : IAiWorksheetService
         var model     = _configuration["Claude:Model"]     ?? "claude-sonnet-4-6";
         var maxTokens = int.Parse(_configuration["Claude:MaxTokens"] ?? "4096");
 
-        var prompt = BuildPrompt(pdfContent, template);
+        var prompt = BuildPrompt(pdfContent, template, sampleQuestions);
 
         var requestBody = new
         {
@@ -51,8 +52,8 @@ public class ClaudeAiService : IAiWorksheetService
         client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
         client.Timeout = TimeSpan.FromSeconds(120);
 
-        _logger.LogInformation("Calling Claude API with model {Model} (template: {Template}) to generate worksheet",
-            model, template?.Name ?? "none");
+        _logger.LogInformation("Calling Claude API with model {Model} (template: {Template}, sampleQuestions: {HasSamples}) to generate worksheet",
+            model, template?.Name ?? "none", sampleQuestions != null ? "yes" : "no");
 
         var response     = await client.PostAsync("https://api.anthropic.com/v1/messages", content);
         var responseJson = await response.Content.ReadAsStringAsync();
@@ -89,7 +90,7 @@ public class ClaudeAiService : IAiWorksheetService
         return worksheet;
     }
 
-    private static string BuildPrompt(string pdfContent, WorksheetTemplate? template)
+    private static string BuildPrompt(string pdfContent, WorksheetTemplate? template, string? sampleQuestions = null)
     {
         const int maxLen  = 8000;
         var truncated = pdfContent.Length > maxLen
@@ -142,7 +143,26 @@ public class ClaudeAiService : IAiWorksheetService
         };
 
         return $$"""
-            You are an expert educator creating a student worksheet from the following educational PDF content.
+            You are an expert educator. Your task is to generate a BRAND NEW student worksheet based on the provided PDF content.
+
+            STEP 1 — CLASSIFY THE INPUT:
+            Read the PDF content and determine which type it is:
+            (A) STUDY MATERIAL — a textbook chapter, article, notes, or reference content with facts/concepts to learn.
+            (B) EXISTING WORKSHEET — content that already contains questions, exercises, problems, blanks, answer keys, or numbered items that students answer.
+
+            STEP 2 — EXTRACT PATTERNS (critical when input is type B):
+            If the input is an EXISTING WORKSHEET, do NOT reproduce or rephrase any of its questions.
+            Instead, analyze and extract only the PEDAGOGICAL PATTERNS:
+            - Subject and topic domain (e.g., Grade 5 fractions, photosynthesis, World War II causes)
+            - Question type mix (e.g., how many multiple choice, fill-in-the-blank, word problems)
+            - Difficulty level and style (e.g., recall vs. application, number ranges used in math)
+            - Format conventions (e.g., "Show your working", diagram labels, matching columns)
+            Then use those patterns as a blueprint to create entirely new questions on the SAME TOPIC.
+
+            If the input is STUDY MATERIAL, generate questions that test the key concepts, facts, and reasoning it covers.
+
+            STEP 3 — GENERATE FRESH QUESTIONS:
+            Create completely original questions. Every question must be new — different wording, different numbers, different scenarios, different answer choices from anything in the source.
 
             Return ONLY a single valid JSON object — no markdown fences, no explanation, nothing else before or after.
             Use this exact schema (five question types available):
@@ -201,8 +221,24 @@ public class ClaudeAiService : IAiWorksheetService
 
             {{difficultyRule}}
 
+            {{(string.IsNullOrWhiteSpace(sampleQuestions) ? "" : $"""
+
+            SAMPLE QUESTIONS — STYLE GUIDE (critical):
+            The user has provided the following sample questions as a style reference.
+            Analyse them carefully and match their:
+            - Cognitive level (recall, application, analysis, etc.)
+            - Sentence structure and phrasing style
+            - Difficulty and complexity
+            - Question type mix and format conventions
+            Generate NEW questions in the same style but on the topic from the PDF. Do NOT reuse any sample question.
+
+            Sample questions:
+            {sampleQuestions}
+            """)}}
+
             General rules (always apply):
-            - Base every question directly on the PDF content
+            - NEVER copy, quote, or rephrase questions that already exist in the PDF content or the sample questions
+            - Every question must be original — new wording, new numbers, new scenarios
             - Use exactly _____ (5 underscores) for blanks in fill_blank questions
             - word_problem answers MUST include line-by-line working using \n between steps (Step 1:, Step 2:, Answer:)
             - Return ONLY the JSON object

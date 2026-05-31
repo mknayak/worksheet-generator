@@ -26,6 +26,7 @@
         .step-circle { width: 36px; height: 36px; border-radius: 50%; background: var(--primary); color: #fff;
                        display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
         @@media print { .no-print { display: none !important; } }
+        .min-width-0 { min-width: 0; }
     </style>
 </head>
 <body>
@@ -62,6 +63,11 @@
                     <li class="nav-item">
                         <a class="nav-link" asp-controller="Worksheet" asp-action="History">
                             <i class="bi bi-clock-history me-1"></i>History
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-white-50" asp-controller="Admin" asp-action="Migrate" title="Migrate SQLite → PostgreSQL">
+                            <i class="bi bi-database-up"></i>
                         </a>
                     </li>
                 </ul>

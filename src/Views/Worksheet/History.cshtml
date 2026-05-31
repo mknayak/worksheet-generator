@@ -3,12 +3,12 @@
     ViewData["Title"] = "Worksheet History";
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 gap-2">
     <div>
         <h4 class="mb-0 fw-bold"><i class="bi bi-clock-history me-2 text-primary"></i>Worksheet History</h4>
         <small class="text-muted">@Model.Worksheets.Count worksheet@(Model.Worksheets.Count == 1 ? "" : "s") generated</small>
     </div>
-    <a asp-controller="Home" asp-action="Index" class="btn btn-primary">
+    <a asp-controller="Home" asp-action="Index" class="btn btn-primary btn-sm">
         <i class="bi bi-magic me-1"></i>Generate New
     </a>
 </div>
@@ -28,7 +28,47 @@
 }
 else
 {
-    <div class="card">
+    <!-- Mobile card list (xs–sm) -->
+    <div class="d-md-none d-flex flex-column gap-3">
+        @foreach (var ws in Model.Worksheets)
+        {
+            <div class="card">
+                <div class="card-body pb-2">
+                    <div class="fw-semibold">@ws.Title</div>
+                    <div class="text-muted small mb-1">@ws.Subject &bull; @ws.Topic</div>
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <span class="badge bg-light text-dark border">@ws.QuestionCount Qs &bull; @ws.TotalPoints pts</span>
+                        @if (!string.IsNullOrEmpty(ws.StudentName) && ws.StudentName != "—")
+                        {
+                            <span class="badge bg-light text-primary border"><i class="bi bi-person me-1"></i>@ws.StudentName</span>
+                        }
+                        <span class="text-muted small ms-auto">@ws.GeneratedAt.ToString("MMM d, yyyy")</span>
+                    </div>
+                </div>
+                <div class="card-footer bg-white border-0 d-flex flex-wrap gap-2 pt-0 pb-3">
+                    <a asp-action="View" asp-route-id="@ws.Id" class="btn btn-outline-primary btn-sm flex-grow-1">
+                        <i class="bi bi-eye me-1"></i>View
+                    </a>
+                    <a asp-action="PrintWorksheet" asp-route-id="@ws.Id" class="btn btn-outline-primary btn-sm flex-grow-1" target="_blank">
+                        <i class="bi bi-file-earmark-arrow-down me-1"></i>Worksheet
+                    </a>
+                    <a asp-action="PrintAnswers" asp-route-id="@ws.Id" class="btn btn-outline-success btn-sm flex-grow-1" target="_blank">
+                        <i class="bi bi-key me-1"></i>Answers
+                    </a>
+                    <form asp-action="Delete" method="post" class="flex-grow-1"
+                          onsubmit="return confirm('Delete this worksheet?')">
+                        <input type="hidden" name="id" value="@ws.Id" />
+                        <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+                            <i class="bi bi-trash me-1"></i>Delete
+                        </button>
+                    </form>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Desktop table (md+) -->
+    <div class="card d-none d-md-block">
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
@@ -69,7 +109,7 @@ else
                             </td>
                             <td class="text-end">
                                 <div class="btn-group btn-group-sm">
-                                    <a asp-action="View" asp-route-id="@ws.Id" class="btn btn-outline-primary">
+                                    <a asp-action="View" asp-route-id="@ws.Id" class="btn btn-outline-primary" title="View">
                                         <i class="bi bi-eye"></i>
                                     </a>
                                     <a asp-action="PrintWorksheet" asp-route-id="@ws.Id" class="btn btn-outline-primary" target="_blank" title="Download Worksheet">

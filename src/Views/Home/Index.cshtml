@@ -65,29 +65,53 @@
                             </div>
                         </div>
 
-                        <!-- Step 3: PDF Upload -->
+                        <!-- Step 2: Content Source -->
                         <div class="d-flex align-items-start gap-3 mb-4">
-                            <div class="step-circle">3</div>
+                            <div class="step-circle">2</div>
                             <div class="flex-grow-1">
-                                <label class="form-label fw-semibold">PDF File</label>
-                                <div id="dropZone" class="border-2 rounded-3 p-4 text-center"
-                                     style="border:2px dashed #c7d2fe;background:#f5f3ff;cursor:pointer;">
-                                    <i class="bi bi-file-earmark-pdf text-danger" style="font-size:2.5rem;"></i>
-                                    <p class="mb-1 mt-2 fw-semibold">Drop PDF here or click to browse</p>
-                                    <p class="text-muted small mb-3">Text-based PDFs up to 20 MB</p>
-                                    <input type="file" name="pdfFile" id="pdfFile" accept=".pdf"
-                                           style="display:none;" required />
-                                    <button type="button" class="btn btn-outline-primary btn-sm"
-                                            onclick="document.getElementById('pdfFile').click()">
-                                        <i class="bi bi-folder2-open me-1"></i>Browse
-                                    </button>
+                                <label class="form-label fw-semibold">Content Source</label>
+
+                                <!-- Toggle buttons -->
+                                <div class="btn-group w-100 mb-3" role="group">
+                                    <input type="radio" class="btn-check" name="inputMode" id="modePdf" value="pdf" checked>
+                                    <label class="btn btn-outline-primary" for="modePdf">
+                                        <i class="bi bi-file-earmark-pdf me-1"></i>PDF Upload
+                                    </label>
+                                    <input type="radio" class="btn-check" name="inputMode" id="modeManual" value="manual">
+                                    <label class="btn btn-outline-primary" for="modeManual">
+                                        <i class="bi bi-pencil-square me-1"></i>Manual Input
+                                    </label>
                                 </div>
-                                <div id="fileInfo" class="mt-2 d-none">
-                                    <div class="alert alert-success py-2 d-flex align-items-center gap-2 mb-0">
-                                        <i class="bi bi-file-check-fill text-success"></i>
-                                        <span id="fileName" class="small fw-semibold"></span>
-                                        <span id="fileSize" class="text-muted small ms-auto"></span>
+
+                                <!-- PDF Upload panel -->
+                                <div id="pdfPanel">
+                                    <div id="dropZone" class="border-2 rounded-3 p-4 text-center"
+                                         style="border:2px dashed #c7d2fe;background:#f5f3ff;cursor:pointer;">
+                                        <i class="bi bi-file-earmark-pdf text-danger" style="font-size:2.5rem;"></i>
+                                        <p class="mb-1 mt-2 fw-semibold">Drop PDF here or click to browse</p>
+                                        <p class="text-muted small mb-3">Text-based PDFs up to 20 MB</p>
+                                        <input type="file" name="pdfFile" id="pdfFile" accept=".pdf"
+                                               style="display:none;" />
+                                        <button type="button" class="btn btn-outline-primary btn-sm"
+                                                onclick="document.getElementById('pdfFile').click()">
+                                            <i class="bi bi-folder2-open me-1"></i>Browse
+                                        </button>
                                     </div>
+                                    <div id="fileInfo" class="mt-2 d-none">
+                                        <div class="alert alert-success py-2 d-flex align-items-center gap-2 mb-0">
+                                            <i class="bi bi-file-check-fill text-success"></i>
+                                            <span id="fileName" class="small fw-semibold"></span>
+                                            <span id="fileSize" class="text-muted small ms-auto"></span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Manual Input panel -->
+                                <div id="manualPanel" class="d-none">
+                                    <textarea name="manualContent" id="manualContent" class="form-control"
+                                              rows="8"
+                                              placeholder="Paste or type your content here — a textbook passage, notes, article, or even existing questions. The AI will generate a fresh worksheet based on this material."></textarea>
+                                    <div class="form-text"><i class="bi bi-info-circle me-1"></i>At least a few sentences needed. The more content, the better the questions.</div>
                                 </div>
                             </div>
                         </div>
@@ -148,9 +172,30 @@
                             </div>
                         </div>
 
-                        <!-- Step 5: Generate -->
-                        <div class="d-flex align-items-start gap-3">
+                        <!-- Step 5: Sample Questions (optional) -->
+                        <div class="d-flex align-items-start gap-3 mb-4">
                             <div class="step-circle">5</div>
+                            <div class="flex-grow-1">
+                                <label class="form-label fw-semibold">
+                                    Sample Questions
+                                    <span class="text-muted fw-normal">(optional)</span>
+                                </label>
+                                <p class="text-muted small mb-2">Provide a few example questions and the AI will generate new ones in the same style.</p>
+                                <button type="button" class="btn btn-outline-secondary btn-sm mb-2"
+                                        data-bs-toggle="collapse" data-bs-target="#sampleQuestionsCollapse">
+                                    <i class="bi bi-plus-circle me-1"></i>Add sample questions
+                                </button>
+                                <div class="collapse" id="sampleQuestionsCollapse">
+                                    <textarea name="sampleQuestions" class="form-control form-control-sm"
+                                              rows="5" placeholder="Paste a few example questions here. The AI will generate new questions in the same style, format, and difficulty level.&#10;&#10;E.g.:&#10;1. What is the capital of France?&#10;2. True or False: Water boils at 100°C.&#10;3. The _____ is the powerhouse of the cell."></textarea>
+                                    <div class="form-text">One question per line. The AI will match style and difficulty, not copy them.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 6: Generate -->
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="step-circle">6</div>
                             <div class="flex-grow-1">
                                 <button type="submit" class="btn btn-primary btn-lg w-100" id="generateBtn">
                                     <i class="bi bi-magic me-2"></i>Generate Worksheet
@@ -184,11 +229,12 @@
                             @foreach (var mat in recentMaterials)
                             {
                                 <a asp-controller="Material" asp-action="Detail" asp-route-id="@mat.Id"
-                                   class="list-group-item list-group-item-action rounded border p-3 text-decoration-none">
-                                    <div class="d-flex justify-content-between align-items-start">
-                                        <div>
-                                            <div class="fw-semibold text-dark">@mat.Title</div>
-                                            <div class="d-flex gap-1 mt-1">
+                                   class="list-group-item list-group-item-action rounded border text-decoration-none"
+                                   style="padding:.875rem 1rem;">
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="flex-grow-1 min-width-0">
+                                            <div class="fw-semibold text-dark text-truncate">@mat.Title</div>
+                                            <div class="d-flex gap-1 mt-1 flex-wrap">
                                                 @if (!string.IsNullOrEmpty(mat.Subject))
                                                 {
                                                     <span class="badge" style="background:#ede9fe;color:#4f46e5;font-size:.7rem;">@mat.Subject</span>
@@ -197,12 +243,11 @@
                                                 {
                                                     <span class="badge" style="background:#dcfce7;color:#15803d;font-size:.7rem;">@mat.ClassName</span>
                                                 }
+                                                <span class="text-muted" style="font-size:.75rem;">@mat.UploadedAt.ToString("MMM d")</span>
                                             </div>
-                                            <small class="text-muted">@mat.OriginalFileName</small>
                                         </div>
-                                        <div class="text-end ms-2">
-                                            <small class="text-muted">@mat.UploadedAt.ToString("MMM d")</small>
-                                            <div><span class="badge bg-primary">View →</span></div>
+                                        <div class="btn btn-primary btn-sm flex-shrink-0">
+                                            View <i class="bi bi-arrow-right ms-1"></i>
                                         </div>
                                     </div>
                                 </a>
@@ -280,18 +325,32 @@
     #mainTabs .nav-link.active { background: rgba(255,255,255,.15); border-radius: 8px 8px 0 0; }
 </style>
 <script>
-    const fileInput  = document.getElementById('pdfFile');
-    const dropZone   = document.getElementById('dropZone');
-    const fileInfo   = document.getElementById('fileInfo');
-    const fileNameEl = document.getElementById('fileName');
-    const fileSizeEl = document.getElementById('fileSize');
-    const titleInput = document.getElementById('materialTitle');
-    const form       = document.getElementById('uploadForm');
-    const genBtn     = document.getElementById('generateBtn');
-    const loading    = document.getElementById('loadingMsg');
-    const loadText   = document.getElementById('loadingText');
+    const fileInput    = document.getElementById('pdfFile');
+    const dropZone     = document.getElementById('dropZone');
+    const fileInfo     = document.getElementById('fileInfo');
+    const fileNameEl   = document.getElementById('fileName');
+    const fileSizeEl   = document.getElementById('fileSize');
+    const titleInput   = document.getElementById('materialTitle');
+    const form         = document.getElementById('uploadForm');
+    const genBtn       = document.getElementById('generateBtn');
+    const loading      = document.getElementById('loadingMsg');
+    const loadText     = document.getElementById('loadingText');
+    const pdfPanel     = document.getElementById('pdfPanel');
+    const manualPanel  = document.getElementById('manualPanel');
+    const modePdfRadio = document.getElementById('modePdf');
 
+    // Toggle between PDF and Manual panels
+    document.querySelectorAll('input[name="inputMode"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            const isPdf = radio.value === 'pdf' && radio.checked;
+            pdfPanel.classList.toggle('d-none', !isPdf);
+            manualPanel.classList.toggle('d-none', isPdf);
+        });
+    });
+
+    // PDF drop-zone
     fileInput.addEventListener('change', showFile);
+    dropZone.addEventListener('click', () => fileInput.click());
     dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.style.background='#ede9fe'; });
     dropZone.addEventListener('dragleave', ()  => { dropZone.style.background='#f5f3ff'; });
     dropZone.addEventListener('drop', e => {
@@ -311,10 +370,22 @@
             titleInput.value = f.name.replace(/\.pdf$/i,'').replace(/[-_]/g,' ');
     }
 
-    form.addEventListener('submit', () => {
+    form.addEventListener('submit', e => {
+        const isPdf = modePdfRadio.checked;
+        if (isPdf && (!fileInput.files || !fileInput.files.length)) {
+            e.preventDefault();
+            alert('Please select a PDF file to upload.');
+            return;
+        }
+        const manualText = document.getElementById('manualContent')?.value?.trim() ?? '';
+        if (!isPdf && manualText.length < 20) {
+            e.preventDefault();
+            alert('Please enter some content in the text area.');
+            return;
+        }
         genBtn.disabled = true;
         genBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating…';
-        loadText.textContent = 'Analysing PDF with OpenAI GPT-4o…';
+        loadText.textContent = isPdf ? 'Analysing PDF and generating worksheet…' : 'Generating worksheet from your content…';
         loading.classList.remove('d-none');
     });
 </script>

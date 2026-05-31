@@ -23,38 +23,55 @@ public class OpenAiService : IAiWorksheetService
     public async Task<Worksheet> GenerateWorksheetAsync(
         string pdfContent,
         string sourceFileName,
-        WorksheetTemplate? template = null)
+        WorksheetTemplate? template        = null,
+        string?            sampleQuestions = null)
     {
         var apiKey = _configuration["OpenAI:ApiKey"]
             ?? throw new InvalidOperationException("OpenAI API key not configured. Set OpenAI:ApiKey in appsettings.json.");
 
-        var model     = _configuration["OpenAI:Model"]     ?? "gpt-4o";
+        var model = _configuration["OpenAI:Model"] ?? "gpt-4o";
         var maxTokens = int.Parse(_configuration["OpenAI:MaxTokens"] ?? "4096");
 
-        var prompt = BuildPrompt(pdfContent, template);
+        var prompt = BuildPrompt(pdfContent, template, sampleQuestions);
 
-        var requestBody = new
+        var requestBody = new Dictionary<string, object>
         {
-            model,
-            max_tokens = maxTokens,
-            messages = new[]
+            ["model"] = model,
+            ["messages"] = new[]
             {
-                new { role = "system", content = "You are an expert educator. Return ONLY valid JSON — no markdown, no commentary." },
+                new { role = "system", content = """
+You are an expert educational worksheet designer with deep knowledge of pedagogy across all school subjects and grade levels.
+
+Your job is to generate ORIGINAL student worksheets. You have two modes depending on what the user provides:
+- STUDY MATERIAL (textbook, notes, article): extract key concepts and create questions that test understanding of those concepts.
+- EXISTING WORKSHEET (already has questions, blanks, problems): analyze the question patterns, topic, difficulty, and format — then generate a completely NEW worksheet on the same topic. Never reproduce or paraphrase questions from the source.
+
+You always:
+- Produce well-structured, pedagogically sound questions appropriate to the topic and difficulty level
+- Vary cognitive demand: mix recall, comprehension, application, and analysis
+- Return ONLY a single valid JSON object — no markdown fences, no prose, no commentary before or after
+- Never include questions copied or closely paraphrased from the source content
+""" },
                 new { role = "user",   content = prompt }
             }
         };
 
-        var json    = JsonSerializer.Serialize(requestBody);
+        if (maxTokens > 0)
+        {
+            requestBody["max_tokens"] = maxTokens;
+        }
+
+        var json = JsonSerializer.Serialize(requestBody);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         var client = _httpClientFactory.CreateClient();
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
-        client.Timeout = TimeSpan.FromSeconds(120);
+        client.Timeout = TimeSpan.FromSeconds(1200);
 
-        _logger.LogInformation("Calling OpenAI API with model {Model} (template: {Template}) to generate worksheet",
-            model, template?.Name ?? "none");
+        _logger.LogInformation("Calling OpenAI API with model {Model} (template: {Template}, sampleQuestions: {HasSamples}) to generate worksheet",
+            model, template?.Name ?? "none", sampleQuestions != null ? "yes" : "no");
 
-        var response     = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
+        var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
         var responseJson = await response.Content.ReadAsStringAsync();
 
         if (!response.IsSuccessStatusCode)
@@ -80,9 +97,9 @@ public class OpenAiService : IAiWorksheetService
             PropertyNameCaseInsensitive = true
         }) ?? throw new Exception("Failed to deserialize worksheet JSON from OpenAI response");
 
-        worksheet.Id             = Guid.NewGuid().ToString();
+        worksheet.Id = Guid.NewGuid().ToString();
         worksheet.SourceFileName = sourceFileName;
-        worksheet.GeneratedAt    = DateTime.Now;
+        worksheet.GeneratedAt = DateTime.Now;
 
         _logger.LogInformation("Generated worksheet '{Title}' with {Count} questions via OpenAI",
             worksheet.Title, worksheet.Questions.Count);
@@ -90,7 +107,7 @@ public class OpenAiService : IAiWorksheetService
         return worksheet;
     }
 
-    private static string BuildPrompt(string pdfContent, WorksheetTemplate? template)
+    private static string BuildPrompt(string pdfContent, WorksheetTemplate? template, string? sampleQuestions = null)
     {
         const int maxLen = 8000;
         var truncated = pdfContent.Length > maxLen
@@ -104,7 +121,7 @@ public class OpenAiService : IAiWorksheetService
                 .Select(qt => $"  - {qt.Count} question(s) of type \"{qt.Type}\" — {qt.Points} points each")
                 .ToList();
             var typeList = string.Join("\n", lines);
-            var total    = template.TotalQuestions;
+            var total = template.TotalQuestions;
 
             questionRules = $"""
                 TEMPLATE OVERRIDE — follow these rules exactly:
@@ -135,14 +152,33 @@ public class OpenAiService : IAiWorksheetService
         var difficulty = template?.Difficulty ?? "mixed";
         var difficultyRule = difficulty switch
         {
-            "easy"   => "DIFFICULTY: All questions must be EASY — suitable for beginners. Focus on direct recall, simple definitions, and basic comprehension. Avoid multi-step reasoning or analysis.",
+            "easy" => "DIFFICULTY: All questions must be EASY — suitable for beginners. Focus on direct recall, simple definitions, and basic comprehension. Avoid multi-step reasoning or analysis.",
             "medium" => "DIFFICULTY: All questions must be MEDIUM — require some understanding and application beyond simple recall. Students should need to think, but not deeply analyse or synthesise.",
-            "hard"   => "DIFFICULTY: All questions must be HARD — require critical thinking, synthesis, and complex multi-step reasoning. Avoid trivial recall questions entirely.",
-            _        => "DIFFICULTY: Use a MIXED spread — approximately 30% easy, 50% medium, 20% hard across all questions."
+            "hard" => "DIFFICULTY: All questions must be HARD — require critical thinking, synthesis, and complex multi-step reasoning. Avoid trivial recall questions entirely.",
+            _ => "DIFFICULTY: Use a MIXED spread — approximately 30% easy, 50% medium, 20% hard across all questions."
         };
 
         return $$"""
-            Based on the following educational PDF content, generate a comprehensive student worksheet with mixed question types.
+            You are an expert educator. Your task is to generate a BRAND NEW student worksheet based on the provided PDF content.
+
+            STEP 1 — CLASSIFY THE INPUT:
+            Read the PDF content and determine which type it is:
+            (A) STUDY MATERIAL — a textbook chapter, article, notes, or reference content with facts/concepts to learn.
+            (B) EXISTING WORKSHEET — content that already contains questions, exercises, problems, blanks, answer keys, or numbered items that students answer.
+
+            STEP 2 — EXTRACT PATTERNS (critical when input is type B):
+            If the input is an EXISTING WORKSHEET, do NOT reproduce or rephrase any of its questions.
+            Instead, analyze and extract only the PEDAGOGICAL PATTERNS:
+            - Subject and topic domain (e.g., Grade 5 fractions, photosynthesis, World War II causes)
+            - Question type mix (e.g., how many multiple choice, fill-in-the-blank, word problems)
+            - Difficulty level and style (e.g., recall vs. application, number ranges used in math)
+            - Format conventions (e.g., "Show your working", diagram labels, matching columns)
+            Then use those patterns as a blueprint to create entirely new questions on the SAME TOPIC.
+
+            If the input is STUDY MATERIAL, generate questions that test the key concepts, facts, and reasoning it covers.
+
+            STEP 3 — GENERATE FRESH QUESTIONS:
+            Create completely original questions. Every question must be new — different wording, different numbers, different scenarios, different answer choices from anything in the source.
 
             Return ONLY a single valid JSON object — no markdown fences, no explanation, nothing else.
             Use this exact schema (five question types available):
@@ -201,8 +237,24 @@ public class OpenAiService : IAiWorksheetService
 
             {{difficultyRule}}
 
+            {{(string.IsNullOrWhiteSpace(sampleQuestions) ? "" : $"""
+
+            SAMPLE QUESTIONS — STYLE GUIDE (critical):
+            The user has provided the following sample questions as a style reference.
+            Analyse them carefully and match their:
+            - Cognitive level (recall, application, analysis, etc.)
+            - Sentence structure and phrasing style
+            - Difficulty and complexity
+            - Question type mix and format conventions
+            Generate NEW questions in the same style but on the topic from the PDF. Do NOT reuse any sample question.
+
+            Sample questions:
+            {sampleQuestions}
+            """)}}
+
             General rules (always apply):
-            - Base every question directly on the PDF content
+            - NEVER copy, quote, or rephrase questions that already exist in the PDF content or the sample questions
+            - Every question must be original — new wording, new numbers, new scenarios
             - Use exactly _____ (5 underscores) for blanks in fill_blank questions
             - word_problem answers MUST include line-by-line working using \n between steps (Step 1:, Step 2:, Answer:)
             - Return ONLY the JSON object

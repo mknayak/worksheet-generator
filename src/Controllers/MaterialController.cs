@@ -93,7 +93,7 @@ public class MaterialController : Controller
     // POST: /Material/GenerateWorksheet
     [HttpPost]
     public async Task<IActionResult> GenerateWorksheet(
-        string materialId, string? profileId, string? templateId)
+        string materialId, string? profileId, string? templateId, string? sampleQuestions)
     {
         var material = await _materialStorage.GetAsync(materialId);
         if (material == null)
@@ -109,10 +109,13 @@ public class MaterialController : Controller
         if (!string.IsNullOrEmpty(templateId))
             template = await _templateStorage.GetAsync(templateId);
 
+        // Normalize sample questions (null if empty/whitespace)
+        var samples = string.IsNullOrWhiteSpace(sampleQuestions) ? null : sampleQuestions.Trim();
+
         try
         {
             var worksheet = await aiService.GenerateWorksheetAsync(
-                material.ExtractedText, material.OriginalFileName, template);
+                material.ExtractedText, material.OriginalFileName, template, samples);
             worksheet.StudentProfileId  = profileId ?? string.Empty;
             worksheet.SessionMaterialId = materialId;
 

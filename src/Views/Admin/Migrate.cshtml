@@ -1,0 +1,179 @@
+@using WorksheetGenerator.Controllers
+@model MigrationResult
+@{
+    ViewData["Title"] = "SQLite → PostgreSQL Migration";
+    var ran = Model.ProfilesCopied > 0 || Model.MaterialsCopied > 0
+           || Model.WorksheetsCopied > 0 || Model.TemplatesCopied > 0
+           || Model.ProfilesSkipped > 0 || Model.MaterialsSkipped > 0
+           || Model.WorksheetsSkipped > 0 || Model.TemplatesSkipped > 0
+           || Model.Errors.Any();
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+
+        <div class="d-flex align-items-center gap-3 mb-4">
+            <a asp-controller="Home" asp-action="Index" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Home
+            </a>
+            <div>
+                <h4 class="mb-0 fw-bold"><i class="bi bi-database-up me-2 text-primary"></i>SQLite → PostgreSQL Migration</h4>
+                <small class="text-muted">One-time data migration tool</small>
+            </div>
+        </div>
+
+        @if (Model.Errors.Any())
+        {
+            <div class="alert alert-danger">
+                <h6 class="fw-bold"><i class="bi bi-exclamation-triangle me-2"></i>Error</h6>
+                @foreach (var e in Model.Errors)
+                {
+                    <div>@e</div>
+                }
+            </div>
+        }
+
+        @if (!Model.IsPostgres && !ran)
+        {
+            <!-- Not on PostgreSQL yet -->
+            <div class="card border-warning">
+                <div class="card-body">
+                    <h6 class="fw-bold text-warning mb-3"><i class="bi bi-exclamation-circle me-2"></i>PostgreSQL not configured</h6>
+                    <p class="mb-2">The app is currently running on <strong>SQLite</strong>. To migrate:</p>
+                    <ol class="small mb-3">
+                        <li class="mb-1">Set <code>ConnectionStrings:DefaultConnection</code> to your PostgreSQL connection string in <code>appsettings.local.json</code> or as an environment variable.</li>
+                        <li class="mb-1">Restart the application — it will connect to PostgreSQL and create the schema automatically.</li>
+                        <li>Return to this page and run the migration to copy your SQLite data across.</li>
+                    </ol>
+                    <div class="bg-light rounded p-3 small">
+                        <div class="fw-semibold mb-1">Example connection string:</div>
+                        <code>Host=localhost;Database=worksheets;Username=postgres;Password=yourpassword</code>
+                    </div>
+                </div>
+            </div>
+        }
+        else if (!ran)
+        {
+            <!-- Ready to migrate — show confirmation -->
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h6 class="fw-semibold mb-3">Pre-flight check</h6>
+                    <div class="d-flex flex-column gap-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                            <span class="small">Active database: <strong>PostgreSQL</strong></span>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            @if (System.IO.File.Exists(Model.SqlitePath))
+                            {
+                                <i class="bi bi-check-circle-fill text-success"></i>
+                                <span class="small">SQLite file found: <code>@Model.SqlitePath</code></span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-x-circle-fill text-danger"></i>
+                                <span class="small text-danger">SQLite file not found at: <code>@Model.SqlitePath</code></span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-primary mb-4">
+                <div class="card-body">
+                    <h6 class="fw-semibold mb-2">What this does</h6>
+                    <ul class="small mb-0">
+                        <li>Reads all Profiles, Materials, Worksheets, and Templates from the SQLite file</li>
+                        <li>Inserts each record into PostgreSQL — <strong>skips any that already exist</strong> (safe to run multiple times)</li>
+                        <li>Does not delete or modify the SQLite file</li>
+                    </ul>
+                </div>
+            </div>
+
+            <form method="post" asp-action="Migrate">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="confirm" value="yes" />
+                <button type="submit" class="btn btn-primary w-100"
+                        @(!System.IO.File.Exists(Model.SqlitePath) ? "disabled" : "")>
+                    <i class="bi bi-database-up me-2"></i>Run Migration Now
+                </button>
+            </form>
+        }
+        else
+        {
+            <!-- Results -->
+            <div class="card mb-4 @(Model.Errors.Any() ? "border-danger" : "border-success")">
+                <div class="card-header @(Model.Errors.Any() ? "bg-danger text-white" : "bg-success text-white") py-3">
+                    <h6 class="mb-0 fw-bold">
+                        @if (Model.Errors.Any())
+                        {
+                            <i class="bi bi-x-circle me-2"></i><span>Migration completed with errors</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-check-circle me-2"></i><span>Migration complete</span>
+                        }
+                    </h6>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Table</th>
+                                <th class="text-center text-success">Copied</th>
+                                <th class="text-center text-muted">Skipped</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><i class="bi bi-people me-1 text-muted"></i>Profiles</td>
+                                <td class="text-center fw-bold text-success">@Model.ProfilesCopied</td>
+                                <td class="text-center text-muted">@Model.ProfilesSkipped</td>
+                            </tr>
+                            <tr>
+                                <td><i class="bi bi-book me-1 text-muted"></i>Materials</td>
+                                <td class="text-center fw-bold text-success">@Model.MaterialsCopied</td>
+                                <td class="text-center text-muted">@Model.MaterialsSkipped</td>
+                            </tr>
+                            <tr>
+                                <td><i class="bi bi-journal-text me-1 text-muted"></i>Worksheets</td>
+                                <td class="text-center fw-bold text-success">@Model.WorksheetsCopied</td>
+                                <td class="text-center text-muted">@Model.WorksheetsSkipped</td>
+                            </tr>
+                            <tr>
+                                <td><i class="bi bi-layout-text-sidebar-reverse me-1 text-muted"></i>Templates</td>
+                                <td class="text-center fw-bold text-success">@Model.TemplatesCopied</td>
+                                <td class="text-center text-muted">@Model.TemplatesSkipped</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            @if (!Model.Errors.Any())
+            {
+                <div class="alert alert-info small">
+                    <i class="bi bi-info-circle me-2"></i>
+                    The SQLite file at <code>@Model.SqlitePath</code> has not been deleted — you can keep it as a backup or remove it manually once you've verified everything looks correct in PostgreSQL.
+                </div>
+            }
+
+            <div class="d-flex gap-2">
+                <a asp-controller="Home" asp-action="Index" class="btn btn-primary flex-grow-1">
+                    <i class="bi bi-house me-1"></i>Go to Home
+                </a>
+                @if (Model.Errors.Any())
+                {
+                    <form method="post" asp-action="Migrate" class="flex-grow-1">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="confirm" value="yes" />
+                        <button type="submit" class="btn btn-outline-danger w-100">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Retry
+                        </button>
+                    </form>
+                }
+            </div>
+        }
+
+    </div>
+</div>
