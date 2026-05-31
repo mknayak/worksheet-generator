@@ -18,9 +18,16 @@ public interface IAiWorksheetService
     ///   Optional sample questions provided by the user. The AI will generate
     ///   new questions in a similar style, format, and difficulty.
     /// </param>
+    /// <param name="imageBytes">
+    ///   Optional raw image bytes (JPEG/PNG/WEBP). When provided, the AI uses
+    ///   vision to read the image content rather than <paramref name="pdfContent"/>.
+    /// </param>
+    /// <param name="imageMimeType">MIME type of the image, e.g. "image/jpeg".</param>
     Task<Worksheet> GenerateWorksheetAsync(
         string             pdfContent,
         string             sourceFileName,
         WorksheetTemplate? template        = null,
-        string?            sampleQuestions = null);
+        string?            sampleQuestions = null,
+        byte[]?            imageBytes      = null,
+        string?            imageMimeType   = null);
 }

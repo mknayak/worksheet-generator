@@ -131,6 +131,107 @@ public class MaterialController : Controller
         }
     }
 
+    // GET: /Material/Edit/{id}
+    public async Task<IActionResult> Edit(string id)
+    {
+        var material = await _materialStorage.GetAsync(id);
+        if (material == null) return NotFound();
+        return View(material);
+    }
+
+    // POST: /Material/Edit/{id}
+    [HttpPost]
+    [RequestSizeLimit(20 * 1024 * 1024)]
+    public async Task<IActionResult> Edit(
+        string id,
+        string title, string? subject, string? className,
+        string contentMode,          // "keep" | "pdf" | "manual" | "image"
+        IFormFile? pdfFile,
+        string? manualContent,
+        IFormFile? imageFile)
+    {
+        var material = await _materialStorage.GetAsync(id);
+        if (material == null) return NotFound();
+
+        // ── Update metadata ──────────────────────────────────────────────────
+        material.Title     = string.IsNullOrWhiteSpace(title) ? material.Title : title.Trim();
+        material.Subject   = subject?.Trim()   ?? string.Empty;
+        material.ClassName = className?.Trim()  ?? string.Empty;
+
+        // ── Update content if requested ──────────────────────────────────────
+        try
+        {
+            switch (contentMode)
+            {
+                case "pdf":
+                    if (pdfFile == null || pdfFile.Length == 0)
+                    {
+                        ModelState.AddModelError("", "Please select a PDF file.");
+                        return View(material);
+                    }
+                    if (!pdfFile.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ModelState.AddModelError("", "Only PDF files are supported.");
+                        return View(material);
+                    }
+                    var pdfExtraction = HttpContext.RequestServices.GetRequiredService<PdfExtractionService>();
+                    using (var stream = pdfFile.OpenReadStream())
+                        material.ExtractedText = pdfExtraction.ExtractText(stream);
+
+                    if (string.IsNullOrWhiteSpace(material.ExtractedText) || material.ExtractedText.Length < 50)
+                    {
+                        ModelState.AddModelError("", "Could not extract text from the PDF. Make sure it's a text-based (not scanned) PDF.");
+                        return View(material);
+                    }
+                    material.OriginalFileName = pdfFile.FileName;
+                    break;
+
+                case "manual":
+                    if (string.IsNullOrWhiteSpace(manualContent) || manualContent.Trim().Length < 20)
+                    {
+                        ModelState.AddModelError("", "Please enter at least a few sentences of content.");
+                        return View(material);
+                    }
+                    material.ExtractedText    = manualContent.Trim();
+                    material.OriginalFileName = "manual-input";
+                    break;
+
+                case "image":
+                    if (imageFile == null || imageFile.Length == 0)
+                    {
+                        ModelState.AddModelError("", "Please select an image file.");
+                        return View(material);
+                    }
+                    // Store a note — actual text will be read by vision model at generation time
+                    material.ExtractedText    = "[Content provided as image — GPT-4o Vision will read it at generation time]";
+                    material.OriginalFileName = imageFile.FileName;
+
+                    // Persist image bytes in a sidecar file named by material ID
+                    var uploadsDir = Path.Combine(
+                        HttpContext.RequestServices.GetRequiredService<IWebHostEnvironment>().WebRootPath,
+                        "uploads");
+                    Directory.CreateDirectory(uploadsDir);
+                    var ext       = Path.GetExtension(imageFile.FileName).ToLowerInvariant();
+                    var imagePath = Path.Combine(uploadsDir, $"{id}{ext}");
+                    await using (var fs = System.IO.File.Create(imagePath))
+                        await imageFile.CopyToAsync(fs);
+                    break;
+
+                // "keep": no content change
+            }
+
+            await _materialStorage.SaveAsync(material);
+            TempData["Success"] = "Material updated successfully.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update material {Id}", id);
+            ModelState.AddModelError("", $"Update failed: {ex.Message}");
+            return View(material);
+        }
+    }
+
     // POST: /Material/Delete/{id}
     [HttpPost]
     public IActionResult Delete(string id)

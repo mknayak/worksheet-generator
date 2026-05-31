@@ -21,29 +21,26 @@ public class OpenAiService : IAiWorksheetService
     }
 
     public async Task<Worksheet> GenerateWorksheetAsync(
-        string pdfContent,
-        string sourceFileName,
+        string             pdfContent,
+        string             sourceFileName,
         WorksheetTemplate? template        = null,
-        string?            sampleQuestions = null)
+        string?            sampleQuestions = null,
+        byte[]?            imageBytes      = null,
+        string?            imageMimeType   = null)
     {
         var apiKey = _configuration["OpenAI:ApiKey"]
             ?? throw new InvalidOperationException("OpenAI API key not configured. Set OpenAI:ApiKey in appsettings.json.");
 
-        var model = _configuration["OpenAI:Model"] ?? "gpt-4o";
-        var maxTokens = int.Parse(_configuration["OpenAI:MaxTokens"] ?? "4096");
+        bool isImageMode = imageBytes != null && imageBytes.Length > 0;
 
-        var prompt = BuildPrompt(pdfContent, template, sampleQuestions);
+        string model;
+        int    maxTokens;
 
-        var requestBody = new Dictionary<string, object>
-        {
-            ["model"] = model,
-            ["messages"] = new[]
-            {
-                new { role = "system", content = """
+        var systemMessage = new { role = "system", content = """
 You are an expert educational worksheet designer with deep knowledge of pedagogy across all school subjects and grade levels.
 
 Your job is to generate ORIGINAL student worksheets. You have two modes depending on what the user provides:
-- STUDY MATERIAL (textbook, notes, article): extract key concepts and create questions that test understanding of those concepts.
+- STUDY MATERIAL (textbook, notes, article, image of a textbook page): extract key concepts and create questions that test understanding of those concepts.
 - EXISTING WORKSHEET (already has questions, blanks, problems): analyze the question patterns, topic, difficulty, and format — then generate a completely NEW worksheet on the same topic. Never reproduce or paraphrase questions from the source.
 
 You always:
@@ -51,27 +48,62 @@ You always:
 - Vary cognitive demand: mix recall, comprehension, application, and analysis
 - Return ONLY a single valid JSON object — no markdown fences, no prose, no commentary before or after
 - Never include questions copied or closely paraphrased from the source content
-""" },
-                new { role = "user",   content = prompt }
-            }
+""" };
+
+        object userMessage;
+        if (isImageMode)
+        {
+            var visionModel = _configuration["OpenAI:VisionModel"]
+                ?? throw new InvalidOperationException("OpenAI:VisionModel is not configured. Add it to appsettings.json.");
+            model     = visionModel;
+            maxTokens = int.Parse(_configuration["OpenAI:VisionMaxTokens"] ?? "4096");
+
+            var base64Image = Convert.ToBase64String(imageBytes!);
+            var mimeType    = imageMimeType ?? "image/jpeg";
+            var textPrompt  = BuildPrompt(string.Empty, template, sampleQuestions, isImageMode: true);
+
+            // Vision API: content is an array of text + image parts
+            userMessage = new
+            {
+                role    = "user",
+                content = new object[]
+                {
+                    new { type = "text",      text      = textPrompt },
+                    new { type = "image_url", image_url = new { url = $"data:{mimeType};base64,{base64Image}" } }
+                }
+            };
+        }
+        else
+        {
+            model     = _configuration["OpenAI:Model"] ?? "gpt-4o";
+            maxTokens = int.Parse(_configuration["OpenAI:MaxTokens"] ?? "0");
+
+            var textPrompt = BuildPrompt(pdfContent, template, sampleQuestions);
+            userMessage = new { role = "user", content = textPrompt };
+        }
+
+        var requestBody = new Dictionary<string, object>
+        {
+            ["model"]    = model,
+            ["messages"] = new object[] { systemMessage, userMessage }
         };
 
         if (maxTokens > 0)
-        {
             requestBody["max_tokens"] = maxTokens;
-        }
 
-        var json = JsonSerializer.Serialize(requestBody);
+        var json    = JsonSerializer.Serialize(requestBody);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         var client = _httpClientFactory.CreateClient();
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
-        client.Timeout = TimeSpan.FromSeconds(1200);
+        client.Timeout = TimeSpan.FromSeconds(120);
 
-        _logger.LogInformation("Calling OpenAI API with model {Model} (template: {Template}, sampleQuestions: {HasSamples}) to generate worksheet",
-            model, template?.Name ?? "none", sampleQuestions != null ? "yes" : "no");
+        _logger.LogInformation(
+            "Calling OpenAI API with model {Model} (template: {Template}, samples: {HasSamples}, mode: {Mode})",
+            model, template?.Name ?? "none", sampleQuestions != null ? "yes" : "no",
+            isImageMode ? "vision" : "text");
 
-        var response = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
+        var response     = await client.PostAsync("https://api.openai.com/v1/chat/completions", content);
         var responseJson = await response.Content.ReadAsStringAsync();
 
         if (!response.IsSuccessStatusCode)
@@ -97,9 +129,9 @@ You always:
             PropertyNameCaseInsensitive = true
         }) ?? throw new Exception("Failed to deserialize worksheet JSON from OpenAI response");
 
-        worksheet.Id = Guid.NewGuid().ToString();
+        worksheet.Id             = Guid.NewGuid().ToString();
         worksheet.SourceFileName = sourceFileName;
-        worksheet.GeneratedAt = DateTime.Now;
+        worksheet.GeneratedAt    = DateTime.Now;
 
         _logger.LogInformation("Generated worksheet '{Title}' with {Count} questions via OpenAI",
             worksheet.Title, worksheet.Questions.Count);
@@ -107,62 +139,28 @@ You always:
         return worksheet;
     }
 
-    private static string BuildPrompt(string pdfContent, WorksheetTemplate? template, string? sampleQuestions = null)
+    private static string BuildPrompt(string pdfContent, WorksheetTemplate? template, string? sampleQuestions = null, bool isImageMode = false)
     {
-        const int maxLen = 8000;
-        var truncated = pdfContent.Length > maxLen
-            ? pdfContent[..maxLen] + "\n\n[Content truncated for length]"
-            : pdfContent;
+        var questionRules = BuildQuestionRules(template);
+        var difficultyRule = BuildDifficultyRule(template?.Difficulty ?? "mixed");
+        var sampleSection  = BuildSampleSection(sampleQuestions);
 
-        string questionRules;
-        if (template != null && template.QuestionTypes.Any())
-        {
-            var lines = template.QuestionTypes
-                .Select(qt => $"  - {qt.Count} question(s) of type \"{qt.Type}\" — {qt.Points} points each")
-                .ToList();
-            var typeList = string.Join("\n", lines);
-            var total = template.TotalQuestions;
+        var contentSection = isImageMode
+            ? "The image attached above is the source material. Read all visible text and content from it carefully."
+            : $"""
+            Content:
+            {TruncateContent(pdfContent)}
+            """;
 
-            questionRules = $"""
-                TEMPLATE OVERRIDE — follow these rules exactly:
-                Generate exactly {total} question(s) using the following distribution:
-                {typeList}
-
-                Do NOT add any other question types beyond those listed.
-                Assign points exactly as specified per type above.
-                """;
-
-            if (!string.IsNullOrWhiteSpace(template.SpecialInstructions))
-                questionRules += $"\n\nAdditional AI instructions from template:\n{template.SpecialInstructions}";
-        }
-        else
-        {
-            questionRules = """
-                DEFAULT RULES:
-                - Generate 12–15 questions total
-                - ALWAYS include: at least 4 multiple_choice, 2 true_false, 2 fill_blank, 1 short_answer
-                - MATHEMATICS / SCIENCE CONTENT: include at least 3 word_problem questions requiring step-by-step calculation
-                - OTHER SUBJECTS: include 1–2 word_problem only if they fit naturally
-                - Points: multiple_choice=5, true_false=2, fill_blank=3, short_answer=10, word_problem=15
-                - Vary difficulty: at least 3 easy, 5 medium, 3 challenging
-                """;
-        }
-
-        // Difficulty instruction (applies whether template is set or not)
-        var difficulty = template?.Difficulty ?? "mixed";
-        var difficultyRule = difficulty switch
-        {
-            "easy" => "DIFFICULTY: All questions must be EASY — suitable for beginners. Focus on direct recall, simple definitions, and basic comprehension. Avoid multi-step reasoning or analysis.",
-            "medium" => "DIFFICULTY: All questions must be MEDIUM — require some understanding and application beyond simple recall. Students should need to think, but not deeply analyse or synthesise.",
-            "hard" => "DIFFICULTY: All questions must be HARD — require critical thinking, synthesis, and complex multi-step reasoning. Avoid trivial recall questions entirely.",
-            _ => "DIFFICULTY: Use a MIXED spread — approximately 30% easy, 50% medium, 20% hard across all questions."
-        };
+        var inputDescription = isImageMode
+            ? "a photo or scanned image"
+            : "the provided content";
 
         return $$"""
-            You are an expert educator. Your task is to generate a BRAND NEW student worksheet based on the provided PDF content.
+            Your task is to generate a BRAND NEW student worksheet based on {{inputDescription}}.
 
             STEP 1 — CLASSIFY THE INPUT:
-            Read the PDF content and determine which type it is:
+            Determine which type it is:
             (A) STUDY MATERIAL — a textbook chapter, article, notes, or reference content with facts/concepts to learn.
             (B) EXISTING WORKSHEET — content that already contains questions, exercises, problems, blanks, answer keys, or numbered items that students answer.
 
@@ -236,8 +234,61 @@ You always:
             {{questionRules}}
 
             {{difficultyRule}}
+            {{sampleSection}}
+            General rules (always apply):
+            - NEVER copy, quote, or rephrase questions that already appear in the source or sample questions
+            - Every question must be original — new wording, new numbers, new scenarios
+            - Use exactly _____ (5 underscores) for blanks in fill_blank questions
+            - word_problem answers MUST include line-by-line working using \n between steps (Step 1:, Step 2:, Answer:)
+            - Return ONLY the JSON object
 
-            {{(string.IsNullOrWhiteSpace(sampleQuestions) ? "" : $"""
+            {{contentSection}}
+            """;
+    }
+
+    private static string BuildQuestionRules(WorksheetTemplate? template)
+    {
+        if (template != null && template.QuestionTypes.Any())
+        {
+            var lines    = template.QuestionTypes.Select(qt => $"  - {qt.Count} question(s) of type \"{qt.Type}\" — {qt.Points} points each");
+            var typeList = string.Join("\n", lines);
+            var total    = template.TotalQuestions;
+            var rules    = $"""
+                TEMPLATE OVERRIDE — follow these rules exactly:
+                Generate exactly {total} question(s) using the following distribution:
+                {typeList}
+
+                Do NOT add any other question types beyond those listed.
+                Assign points exactly as specified per type above.
+                """;
+            if (!string.IsNullOrWhiteSpace(template.SpecialInstructions))
+                rules += $"\n\nAdditional AI instructions from template:\n{template.SpecialInstructions}";
+            return rules;
+        }
+
+        return """
+            DEFAULT RULES:
+            - Generate 12–15 questions total
+            - ALWAYS include: at least 4 multiple_choice, 2 true_false, 2 fill_blank, 1 short_answer
+            - MATHEMATICS / SCIENCE CONTENT: include at least 3 word_problem questions requiring step-by-step calculation
+            - OTHER SUBJECTS: include 1–2 word_problem only if they fit naturally
+            - Points: multiple_choice=5, true_false=2, fill_blank=3, short_answer=10, word_problem=15
+            - Vary difficulty: at least 3 easy, 5 medium, 3 challenging
+            """;
+    }
+
+    private static string BuildDifficultyRule(string difficulty) => difficulty switch
+    {
+        "easy"   => "DIFFICULTY: All questions must be EASY — suitable for beginners. Focus on direct recall, simple definitions, and basic comprehension. Avoid multi-step reasoning or analysis.",
+        "medium" => "DIFFICULTY: All questions must be MEDIUM — require some understanding and application beyond simple recall. Students should need to think, but not deeply analyse or synthesise.",
+        "hard"   => "DIFFICULTY: All questions must be HARD — require critical thinking, synthesis, and complex multi-step reasoning. Avoid trivial recall questions entirely.",
+        _        => "DIFFICULTY: Use a MIXED spread — approximately 30% easy, 50% medium, 20% hard across all questions."
+    };
+
+    private static string BuildSampleSection(string? sampleQuestions)
+    {
+        if (string.IsNullOrWhiteSpace(sampleQuestions)) return string.Empty;
+        return $"""
 
             SAMPLE QUESTIONS — STYLE GUIDE (critical):
             The user has provided the following sample questions as a style reference.
@@ -246,24 +297,18 @@ You always:
             - Sentence structure and phrasing style
             - Difficulty and complexity
             - Question type mix and format conventions
-            Generate NEW questions in the same style but on the topic from the PDF. Do NOT reuse any sample question.
+            Generate NEW questions in the same style but on the topic from the source. Do NOT reuse any sample question.
 
             Sample questions:
             {sampleQuestions}
-            """)}}
 
-            General rules (always apply):
-            - NEVER copy, quote, or rephrase questions that already exist in the PDF content or the sample questions
-            - Every question must be original — new wording, new numbers, new scenarios
-            - Use exactly _____ (5 underscores) for blanks in fill_blank questions
-            - word_problem answers MUST include line-by-line working using \n between steps (Step 1:, Step 2:, Answer:)
-            - Return ONLY the JSON object
-
-            PDF Content:
-            {{truncated}}
             """;
     }
 
+    private static string TruncateContent(string text, int maxLen = 8000) =>
+        text.Length > maxLen ? text[..maxLen] + "\n\n[Content truncated for length]" : text;
+
+    /// <summary>
     private static string ExtractJson(string text)
     {
         text = text.Trim();

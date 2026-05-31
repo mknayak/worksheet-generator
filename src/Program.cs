@@ -36,7 +36,6 @@ else
 }
 
 // ── Application services ──────────────────────────────────────────────────────
-builder.Services.AddKeyedScoped<IAiWorksheetService, ClaudeAiService>("claude");
 builder.Services.AddKeyedScoped<IAiWorksheetService, OpenAiService>("openai");
 
 builder.Services.AddScoped<PdfExtractionService>();

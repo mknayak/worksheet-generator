@@ -1,0 +1,267 @@
+@model SessionMaterial
+@{
+    ViewData["Title"] = $"Edit — {Model.Title}";
+}
+
+<!-- Breadcrumb -->
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a asp-action="Index">Library</a></li>
+        <li class="breadcrumb-item"><a asp-action="Detail" asp-route-id="@Model.Id">@Model.Title</a></li>
+        <li class="breadcrumb-item active">Edit</li>
+    </ol>
+</nav>
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="alert alert-danger">
+        @foreach (var err in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+        {
+            <div>@err.ErrorMessage</div>
+        }
+    </div>
+}
+
+<div class="row g-4">
+
+    <!-- Edit form -->
+    <div class="col-lg-7">
+        <form asp-action="Edit" asp-route-id="@Model.Id" method="post"
+              enctype="multipart/form-data" id="editForm">
+
+            <!-- ── Metadata ───────────────────────────────────────────────── -->
+            <div class="card mb-4">
+                <div class="card-header fw-semibold py-3"
+                     style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;">
+                    <i class="bi bi-tag me-2"></i>Details
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
+                        <input type="text" name="title" class="form-control"
+                               value="@Model.Title" required />
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Subject</label>
+                            <input type="text" name="subject" class="form-control"
+                                   value="@Model.Subject" placeholder="e.g. Biology" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Class / Grade</label>
+                            <input type="text" name="className" class="form-control"
+                                   value="@Model.ClassName" placeholder="e.g. Grade 10" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Content ────────────────────────────────────────────────── -->
+            <div class="card mb-4">
+                <div class="card-header fw-semibold py-3 bg-white">
+                    <i class="bi bi-file-text me-2 text-primary"></i>Content
+                </div>
+                <div class="card-body">
+
+                    <!-- Content mode toggle -->
+                    <label class="form-label fw-semibold">Update content <span class="text-muted fw-normal">(optional)</span></label>
+                    <div class="btn-group w-100 mb-3" role="group">
+                        <input type="radio" class="btn-check" name="contentMode" id="modeKeep"  value="keep"   checked>
+                        <label class="btn btn-outline-secondary" for="modeKeep">
+                            <i class="bi bi-lock me-1"></i>Keep existing
+                        </label>
+
+                        <input type="radio" class="btn-check" name="contentMode" id="modePdf"   value="pdf">
+                        <label class="btn btn-outline-primary" for="modePdf">
+                            <i class="bi bi-file-earmark-pdf me-1"></i>PDF Upload
+                        </label>
+
+                        <input type="radio" class="btn-check" name="contentMode" id="modeImage" value="image">
+                        <label class="btn btn-outline-success" for="modeImage">
+                            <i class="bi bi-camera me-1"></i>Camera / Photo
+                        </label>
+
+                        <input type="radio" class="btn-check" name="contentMode" id="modeManual" value="manual">
+                        <label class="btn btn-outline-warning" for="modeManual">
+                            <i class="bi bi-pencil-square me-1"></i>Manual Input
+                        </label>
+                    </div>
+
+                    <!-- Keep existing: show current content summary -->
+                    <div id="panelKeep">
+                        <div class="alert alert-light border d-flex gap-3 align-items-start mb-0">
+                            <i class="bi bi-file-earmark-text text-primary fs-4 flex-shrink-0 mt-1"></i>
+                            <div>
+                                <div class="fw-semibold small">Current source: <span class="text-muted fw-normal">@Model.OriginalFileName</span></div>
+                                <div class="small text-muted">@(Model.ExtractedText.Length.ToString("N0")) characters of extracted content</div>
+                                <button type="button" class="btn btn-link btn-sm px-0 py-1 text-muted"
+                                        data-bs-toggle="collapse" data-bs-target="#existingPreview">
+                                    Preview text <i class="bi bi-chevron-down"></i>
+                                </button>
+                                <div class="collapse" id="existingPreview">
+                                    <pre class="small text-muted mt-2 mb-0"
+                                         style="white-space:pre-wrap;max-height:180px;overflow-y:auto;">@(Model.ExtractedText.Length > 1500 ? Model.ExtractedText[..1500] + "\n…[truncated]" : Model.ExtractedText)</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PDF Upload panel -->
+                    <div id="panelPdf" class="d-none">
+                        <div id="pdfDropZone" class="rounded-3 p-4 text-center"
+                             style="border:2px dashed #c7d2fe;background:#f5f3ff;cursor:pointer;">
+                            <i class="bi bi-file-earmark-pdf text-danger" style="font-size:2rem;"></i>
+                            <p class="mb-1 mt-2 fw-semibold small">Drop PDF here or click to browse</p>
+                            <input type="file" name="pdfFile" id="pdfFile" accept=".pdf" style="display:none;" />
+                            <button type="button" class="btn btn-outline-primary btn-sm mt-1"
+                                    onclick="document.getElementById('pdfFile').click()">
+                                <i class="bi bi-folder2-open me-1"></i>Browse
+                            </button>
+                        </div>
+                        <div id="pdfFileInfo" class="mt-2 d-none">
+                            <div class="alert alert-success py-2 d-flex align-items-center gap-2 mb-0">
+                                <i class="bi bi-file-check-fill text-success"></i>
+                                <span id="pdfFileName" class="small fw-semibold"></span>
+                                <span id="pdfFileSize" class="text-muted small ms-auto"></span>
+                            </div>
+                        </div>
+                        <div class="form-text">Replaces all existing extracted content.</div>
+                    </div>
+
+                    <!-- Camera / Photo panel -->
+                    <div id="panelImage" class="d-none">
+                        <div class="rounded-3 p-4 text-center"
+                             style="border:2px dashed #a7f3d0;background:#f0fdf4;">
+                            <i class="bi bi-camera2 text-success" style="font-size:2rem;"></i>
+                            <p class="mb-2 mt-2 fw-semibold small">Take a photo or upload an image</p>
+                            <div class="d-flex gap-2 justify-content-center">
+                                <input type="file" name="imageFile" id="imageFile"
+                                       accept="image/jpeg,image/png,image/webp"
+                                       capture="environment" style="display:none;" />
+                                <input type="file" id="imageGallery"
+                                       accept="image/jpeg,image/png,image/webp"
+                                       style="display:none;" />
+                                <button type="button" class="btn btn-outline-success btn-sm"
+                                        onclick="document.getElementById('imageFile').click()">
+                                    <i class="bi bi-camera me-1"></i>Camera
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm"
+                                        onclick="document.getElementById('imageGallery').click()">
+                                    <i class="bi bi-image me-1"></i>Gallery
+                                </button>
+                            </div>
+                        </div>
+                        <div id="imagePreviewWrap" class="mt-2 d-none">
+                            <img id="imagePreview" src="" alt="Preview"
+                                 class="img-fluid rounded border w-100"
+                                 style="max-height:200px;object-fit:contain;background:#f8f9fa;" />
+                            <div class="mt-1 d-flex align-items-center gap-2">
+                                <i class="bi bi-image text-success"></i>
+                                <span id="imageName" class="small fw-semibold"></span>
+                                <span id="imageSize" class="text-muted small ms-auto"></span>
+                            </div>
+                        </div>
+                        <div class="form-text mt-1">GPT-4o Vision reads the image at generation time. Replaces existing content.</div>
+                    </div>
+
+                    <!-- Manual Input panel -->
+                    <div id="panelManual" class="d-none">
+                        <textarea name="manualContent" id="manualContent" class="form-control"
+                                  rows="10"
+                                  placeholder="Paste or type the new content here. This replaces the existing extracted text.">@Model.ExtractedText</textarea>
+                        <div class="form-text">Replaces all existing content with what you type here.</div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg me-1"></i>Save Changes
+                </button>
+                <a asp-action="Detail" asp-route-id="@Model.Id" class="btn btn-outline-secondary">
+                    Cancel
+                </a>
+            </div>
+
+        </form>
+    </div>
+
+    <!-- Right: info sidebar -->
+    <div class="col-lg-5">
+        <div class="card border-0 bg-light">
+            <div class="card-body small text-muted">
+                <h6 class="fw-semibold text-dark mb-3"><i class="bi bi-info-circle me-1"></i>About editing</h6>
+                <p><strong>Details</strong> — changing the title, subject, or class only affects how the material is labelled. Previously generated worksheets are unaffected.</p>
+                <p><strong>Replacing content</strong> — swapping in a new PDF, image, or manual text will be used for any worksheets generated <em>after</em> the update. Existing worksheets are unchanged.</p>
+                <p class="mb-0"><strong>Camera / Photo</strong> — the image is stored and GPT-4o Vision reads it each time you generate a worksheet from this material.</p>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+<script>
+    // ── Content mode toggle ──────────────────────────────────────────────────
+    const panels = { keep: 'panelKeep', pdf: 'panelPdf', image: 'panelImage', manual: 'panelManual' };
+    document.querySelectorAll('input[name="contentMode"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            Object.entries(panels).forEach(([val, id]) => {
+                document.getElementById(id).classList.toggle('d-none', radio.value !== val);
+            });
+        });
+    });
+
+    // ── PDF drop-zone ────────────────────────────────────────────────────────
+    const pdfInput    = document.getElementById('pdfFile');
+    const pdfDropZone = document.getElementById('pdfDropZone');
+    const pdfFileInfo = document.getElementById('pdfFileInfo');
+    const pdfFileName = document.getElementById('pdfFileName');
+    const pdfFileSize = document.getElementById('pdfFileSize');
+
+    pdfInput.addEventListener('change', showPdfFile);
+    pdfDropZone.addEventListener('click', () => pdfInput.click());
+    pdfDropZone.addEventListener('dragover',  e => { e.preventDefault(); pdfDropZone.style.background='#ede9fe'; });
+    pdfDropZone.addEventListener('dragleave', ()  => { pdfDropZone.style.background='#f5f3ff'; });
+    pdfDropZone.addEventListener('drop', e => {
+        e.preventDefault(); pdfDropZone.style.background='#f5f3ff';
+        if (e.dataTransfer.files.length) {
+            const dt = new DataTransfer(); dt.items.add(e.dataTransfer.files[0]);
+            pdfInput.files = dt.files; showPdfFile();
+        }
+    });
+    function showPdfFile() {
+        const f = pdfInput.files[0]; if (!f) return;
+        pdfFileName.textContent = f.name;
+        pdfFileSize.textContent = (f.size/1024/1024).toFixed(2) + ' MB';
+        pdfFileInfo.classList.remove('d-none');
+    }
+
+    // ── Camera / image ───────────────────────────────────────────────────────
+    const imageInput       = document.getElementById('imageFile');
+    const imageGallery     = document.getElementById('imageGallery');
+    const imagePreviewWrap = document.getElementById('imagePreviewWrap');
+    const imagePreview     = document.getElementById('imagePreview');
+    const imageNameEl      = document.getElementById('imageName');
+    const imageSizeEl      = document.getElementById('imageSize');
+
+    imageGallery.addEventListener('change', () => {
+        if (!imageGallery.files.length) return;
+        const dt = new DataTransfer(); dt.items.add(imageGallery.files[0]);
+        imageInput.files = dt.files;
+        showImagePreview(imageGallery.files[0]);
+    });
+    imageInput.addEventListener('change', () => {
+        if (imageInput.files.length) showImagePreview(imageInput.files[0]);
+    });
+    function showImagePreview(file) {
+        const reader = new FileReader();
+        reader.onload = e => { imagePreview.src = e.target.result; imagePreviewWrap.classList.remove('d-none'); };
+        reader.readAsDataURL(file);
+        imageNameEl.textContent = file.name;
+        imageSizeEl.textContent = (file.size/1024/1024).toFixed(2) + ' MB';
+    }
+</script>
+}

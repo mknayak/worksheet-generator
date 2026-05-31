@@ -33,51 +33,69 @@ public class WorksheetController : Controller
         _logger           = logger;
     }
 
+    private static readonly HashSet<string> AllowedImageMimeTypes =
+        new(StringComparer.OrdinalIgnoreCase) { "image/jpeg", "image/png", "image/webp", "image/gif" };
+
     // POST: /Worksheet/Generate
     [HttpPost]
     [RequestSizeLimit(20 * 1024 * 1024)]
     public async Task<IActionResult> Generate(
-        string? profileId, IFormFile? pdfFile, string? manualContent,
+        string? profileId, IFormFile? pdfFile, string? manualContent, IFormFile? imageFile,
         string? materialTitle, string? materialSubject, string? materialClass,
         string? templateId, string? sampleQuestions)
     {
-        // Determine input mode: PDF upload or manual text
         bool isManual = !string.IsNullOrWhiteSpace(manualContent);
+        bool isImage  = !isManual && imageFile != null && imageFile.Length > 0;
+        bool isPdf    = !isManual && !isImage;
 
-        if (!isManual && (pdfFile == null || pdfFile.Length == 0))
+        // Validate inputs
+        if (isPdf && (pdfFile == null || pdfFile.Length == 0))
         {
-            TempData["Error"] = "Please upload a PDF or enter content manually.";
+            TempData["Error"] = "Please upload a PDF, take a photo, or enter content manually.";
             return RedirectToAction("Index", "Home");
         }
-
-        if (!isManual && !pdfFile!.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+        if (isPdf && !pdfFile!.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
         {
-            TempData["Error"] = "Only PDF files are supported.";
+            TempData["Error"] = "Only PDF files are supported for the PDF upload option.";
+            return RedirectToAction("Index", "Home");
+        }
+        if (isImage && !AllowedImageMimeTypes.Contains(imageFile!.ContentType))
+        {
+            TempData["Error"] = "Unsupported image format. Please upload a JPEG, PNG, or WEBP image.";
             return RedirectToAction("Index", "Home");
         }
 
         var aiService = _serviceProvider.GetRequiredKeyedService<IAiWorksheetService>("openai");
 
-        // Load template if selected
         WorksheetTemplate? template = null;
         if (!string.IsNullOrEmpty(templateId))
             template = await _templateStorage.GetAsync(templateId);
 
         try
         {
-            string sourceText;
-            string sourceFileName;
+            string  sourceText;
+            string  sourceFileName;
+            byte[]? imageBytes    = null;
+            string? imageMimeType = null;
 
             if (isManual)
             {
                 sourceText     = manualContent!.Trim();
                 sourceFileName = "manual-input";
-
                 if (sourceText.Length < 20)
                 {
                     TempData["Error"] = "Please enter more content — at least a few sentences are needed to generate questions.";
                     return RedirectToAction("Index", "Home");
                 }
+            }
+            else if (isImage)
+            {
+                sourceFileName = imageFile!.FileName;
+                imageMimeType  = imageFile.ContentType;
+                using var ms   = new MemoryStream();
+                await imageFile.CopyToAsync(ms);
+                imageBytes = ms.ToArray();
+                sourceText = string.Empty; // text extracted by vision model
             }
             else
             {
@@ -92,22 +110,25 @@ public class WorksheetController : Controller
                 }
             }
 
-            // Save as a library material
+            // Save as a library material (image mode stores a placeholder)
             var material = new SessionMaterial
             {
                 Title            = string.IsNullOrWhiteSpace(materialTitle)
-                                       ? (isManual ? "Manual Input" : Path.GetFileNameWithoutExtension(pdfFile!.FileName))
+                                       ? isManual  ? "Manual Input"
+                                       : isImage   ? Path.GetFileNameWithoutExtension(imageFile!.FileName)
+                                       : Path.GetFileNameWithoutExtension(pdfFile!.FileName)
                                        : materialTitle,
-                Subject          = materialSubject  ?? string.Empty,
-                ClassName        = materialClass    ?? string.Empty,
+                Subject          = materialSubject ?? string.Empty,
+                ClassName        = materialClass   ?? string.Empty,
                 OriginalFileName = sourceFileName,
-                ExtractedText    = sourceText
+                ExtractedText    = isImage ? "[Generated from image via GPT-4o Vision]" : sourceText
             };
             await _materialStorage.SaveAsync(material);
 
             // Generate worksheet via AI
             var samples   = string.IsNullOrWhiteSpace(sampleQuestions) ? null : sampleQuestions.Trim();
-            var worksheet = await aiService.GenerateWorksheetAsync(sourceText, sourceFileName, template, samples);
+            var worksheet = await aiService.GenerateWorksheetAsync(
+                sourceText, sourceFileName, template, samples, imageBytes, imageMimeType);
             worksheet.StudentProfileId  = profileId ?? string.Empty;
             worksheet.SessionMaterialId = material.Id;
 

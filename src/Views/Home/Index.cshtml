@@ -77,6 +77,10 @@
                                     <label class="btn btn-outline-primary" for="modePdf">
                                         <i class="bi bi-file-earmark-pdf me-1"></i>PDF Upload
                                     </label>
+                                    <input type="radio" class="btn-check" name="inputMode" id="modeCamera" value="camera">
+                                    <label class="btn btn-outline-primary" for="modeCamera">
+                                        <i class="bi bi-camera me-1"></i>Camera / Photo
+                                    </label>
                                     <input type="radio" class="btn-check" name="inputMode" id="modeManual" value="manual">
                                     <label class="btn btn-outline-primary" for="modeManual">
                                         <i class="bi bi-pencil-square me-1"></i>Manual Input
@@ -104,6 +108,47 @@
                                             <span id="fileSize" class="text-muted small ms-auto"></span>
                                         </div>
                                     </div>
+                                </div>
+
+                                <!-- Camera / Photo panel -->
+                                <div id="cameraPanel" class="d-none">
+                                    <div id="imageDropZone" class="border-2 rounded-3 p-4 text-center"
+                                         style="border:2px dashed #a7f3d0;background:#f0fdf4;cursor:pointer;">
+                                        <i class="bi bi-camera2 text-success" style="font-size:2.5rem;"></i>
+                                        <p class="mb-1 mt-2 fw-semibold">Take a photo or upload an image</p>
+                                        <p class="text-muted small mb-3">JPEG, PNG, or WEBP — textbook pages, notes, whiteboards</p>
+                                        <!-- capture="environment" opens rear camera on mobile -->
+                                        <input type="file" name="imageFile" id="imageFile"
+                                               accept="image/jpeg,image/png,image/webp"
+                                               capture="environment" style="display:none;" />
+                                        <div class="d-flex gap-2 justify-content-center">
+                                            <button type="button" class="btn btn-outline-success btn-sm"
+                                                    onclick="document.getElementById('imageFile').click()">
+                                                <i class="bi bi-camera me-1"></i>Camera
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                                    onclick="openImageGallery()">
+                                                <i class="bi bi-image me-1"></i>Gallery
+                                            </button>
+                                        </div>
+                                        <!-- Gallery input (no capture attribute) -->
+                                        <input type="file" id="imageGallery"
+                                               accept="image/jpeg,image/png,image/webp"
+                                               style="display:none;" />
+                                    </div>
+                                    <div id="imagePreviewWrap" class="mt-2 d-none">
+                                        <div class="position-relative d-inline-block w-100">
+                                            <img id="imagePreview" src="" alt="Preview"
+                                                 class="img-fluid rounded border w-100"
+                                                 style="max-height:220px;object-fit:contain;background:#f8f9fa;" />
+                                            <div class="mt-1 d-flex align-items-center gap-2">
+                                                <i class="bi bi-image text-success"></i>
+                                                <span id="imageName" class="small fw-semibold"></span>
+                                                <span id="imageSize" class="text-muted small ms-auto"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="form-text mt-1"><i class="bi bi-info-circle me-1"></i>GPT-4o Vision reads the image directly — works on printed text, handwriting, and diagrams.</div>
                                 </div>
 
                                 <!-- Manual Input panel -->
@@ -325,67 +370,106 @@
     #mainTabs .nav-link.active { background: rgba(255,255,255,.15); border-radius: 8px 8px 0 0; }
 </style>
 <script>
-    const fileInput    = document.getElementById('pdfFile');
-    const dropZone     = document.getElementById('dropZone');
-    const fileInfo     = document.getElementById('fileInfo');
-    const fileNameEl   = document.getElementById('fileName');
-    const fileSizeEl   = document.getElementById('fileSize');
-    const titleInput   = document.getElementById('materialTitle');
-    const form         = document.getElementById('uploadForm');
-    const genBtn       = document.getElementById('generateBtn');
-    const loading      = document.getElementById('loadingMsg');
-    const loadText     = document.getElementById('loadingText');
-    const pdfPanel     = document.getElementById('pdfPanel');
-    const manualPanel  = document.getElementById('manualPanel');
-    const modePdfRadio = document.getElementById('modePdf');
+    const fileInput       = document.getElementById('pdfFile');
+    const dropZone        = document.getElementById('dropZone');
+    const fileInfo        = document.getElementById('fileInfo');
+    const fileNameEl      = document.getElementById('fileName');
+    const fileSizeEl      = document.getElementById('fileSize');
+    const titleInput      = document.getElementById('materialTitle');
+    const form            = document.getElementById('uploadForm');
+    const genBtn          = document.getElementById('generateBtn');
+    const loading         = document.getElementById('loadingMsg');
+    const loadText        = document.getElementById('loadingText');
+    const pdfPanel        = document.getElementById('pdfPanel');
+    const cameraPanel     = document.getElementById('cameraPanel');
+    const manualPanel     = document.getElementById('manualPanel');
+    const imageFileInput  = document.getElementById('imageFile');
+    const imageGallery    = document.getElementById('imageGallery');
+    const imagePreviewWrap= document.getElementById('imagePreviewWrap');
+    const imagePreview    = document.getElementById('imagePreview');
+    const imageNameEl     = document.getElementById('imageName');
+    const imageSizeEl     = document.getElementById('imageSize');
 
-    // Toggle between PDF and Manual panels
+    // ── Mode toggle ─────────────────────────────────────────────────────────
     document.querySelectorAll('input[name="inputMode"]').forEach(radio => {
         radio.addEventListener('change', () => {
-            const isPdf = radio.value === 'pdf' && radio.checked;
-            pdfPanel.classList.toggle('d-none', !isPdf);
-            manualPanel.classList.toggle('d-none', isPdf);
+            pdfPanel.classList.toggle   ('d-none', radio.value !== 'pdf');
+            cameraPanel.classList.toggle('d-none', radio.value !== 'camera');
+            manualPanel.classList.toggle('d-none', radio.value !== 'manual');
         });
     });
 
-    // PDF drop-zone
-    fileInput.addEventListener('change', showFile);
-    dropZone.addEventListener('click', () => fileInput.click());
+    // ── PDF drop-zone ───────────────────────────────────────────────────────
+    fileInput.addEventListener('change', showPdfFile);
     dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.style.background='#ede9fe'; });
     dropZone.addEventListener('dragleave', ()  => { dropZone.style.background='#f5f3ff'; });
     dropZone.addEventListener('drop', e => {
         e.preventDefault(); dropZone.style.background='#f5f3ff';
         if (e.dataTransfer.files.length) {
             const dt = new DataTransfer(); dt.items.add(e.dataTransfer.files[0]);
-            fileInput.files = dt.files; showFile();
+            fileInput.files = dt.files; showPdfFile();
         }
     });
 
-    function showFile() {
+    function showPdfFile() {
         const f = fileInput.files[0]; if (!f) return;
         fileNameEl.textContent = f.name;
-        fileSizeEl.textContent = (f.size/1024/1024).toFixed(2)+' MB';
+        fileSizeEl.textContent = (f.size/1024/1024).toFixed(2) + ' MB';
         fileInfo.classList.remove('d-none');
         if (!titleInput.value)
             titleInput.value = f.name.replace(/\.pdf$/i,'').replace(/[-_]/g,' ');
     }
 
+    // ── Camera / image ──────────────────────────────────────────────────────
+    function openImageGallery() {
+        // Clone the imageFile input without the capture attribute for gallery picking
+        imageGallery.click();
+    }
+
+    imageGallery.addEventListener('change', () => {
+        if (!imageGallery.files.length) return;
+        // Copy chosen file into the named imageFile input so the form submits it
+        const dt = new DataTransfer(); dt.items.add(imageGallery.files[0]);
+        imageFileInput.files = dt.files;
+        showImagePreview(imageGallery.files[0]);
+    });
+
+    imageFileInput.addEventListener('change', () => {
+        if (imageFileInput.files.length) showImagePreview(imageFileInput.files[0]);
+    });
+
+    function showImagePreview(file) {
+        const reader = new FileReader();
+        reader.onload = e => {
+            imagePreview.src = e.target.result;
+            imagePreviewWrap.classList.remove('d-none');
+        };
+        reader.readAsDataURL(file);
+        imageNameEl.textContent = file.name;
+        imageSizeEl.textContent = (file.size/1024/1024).toFixed(2) + ' MB';
+        if (!titleInput.value)
+            titleInput.value = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+    }
+
+    // ── Form submission ──────────────────────────────────────────────────────
     form.addEventListener('submit', e => {
-        const isPdf = modePdfRadio.checked;
-        if (isPdf && (!fileInput.files || !fileInput.files.length)) {
-            e.preventDefault();
-            alert('Please select a PDF file to upload.');
-            return;
+        const mode = document.querySelector('input[name="inputMode"]:checked').value;
+
+        if (mode === 'pdf' && (!fileInput.files || !fileInput.files.length)) {
+            e.preventDefault(); alert('Please select a PDF file.'); return;
         }
-        const manualText = document.getElementById('manualContent')?.value?.trim() ?? '';
-        if (!isPdf && manualText.length < 20) {
-            e.preventDefault();
-            alert('Please enter some content in the text area.');
-            return;
+        if (mode === 'camera' && (!imageFileInput.files || !imageFileInput.files.length)) {
+            e.preventDefault(); alert('Please take or select a photo.'); return;
         }
+        if (mode === 'manual' && (document.getElementById('manualContent')?.value?.trim().length ?? 0) < 20) {
+            e.preventDefault(); alert('Please enter some content in the text area.'); return;
+        }
+
         genBtn.disabled = true;
         genBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating…';
-        loadText.textContent = isPdf ? 'Analysing PDF and generating worksheet…' : 'Generating worksheet from your content…';
+        loadText.textContent = mode === 'pdf'    ? 'Analysing PDF and generating worksheet…'
+                             : mode === 'camera' ? 'Reading image with GPT-4o Vision…'
+                             :                     'Generating worksheet from your content…';
         loading.classList.remove('d-none');
     });
 </script>
